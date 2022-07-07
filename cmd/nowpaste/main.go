@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -79,6 +80,7 @@ func SSMParameterToFlag(ctx context.Context, ssmPath string, prefix string) func
 		}))
 	}
 	client := ssm.NewFromConfig(awsCfg, ssmOpts...)
+	log.Printf("[info] Get SSM Parameter by path: %s", ssmPath)
 	p := ssm.NewGetParametersByPathPaginator(client, &ssm.GetParametersByPathInput{
 		Path:           aws.String(ssmPath),
 		WithDecryption: *aws.Bool(true),
@@ -92,9 +94,11 @@ func SSMParameterToFlag(ctx context.Context, ssmPath string, prefix string) func
 			return func(_ *flag.Flag) {}
 		}
 		for _, param := range output.Parameters {
+			log.Printf("[debug] Get SSM Parameter: %s", *param.Name)
 			values[*param.Name] = *param.Value
 		}
 	}
+	log.Printf("[info] Get %d SSM Parameters", len(values))
 	return func(f *flag.Flag) {
 		names := []string{
 			strings.ToUpper(prefix + strings.ReplaceAll(f.Name, "-", "_")),
@@ -103,7 +107,9 @@ func SSMParameterToFlag(ctx context.Context, ssmPath string, prefix string) func
 			strings.ToLower(strings.ReplaceAll(f.Name, "-", "_")),
 		}
 		for _, name := range names {
-			if s, ok := values[name]; ok {
+			paramPath := filepath.Join(ssmPath, name)
+			if s, ok := values[paramPath]; ok {
+				log.Printf("[info] use SSM Parameter: %s", paramPath)
 				f.Value.Set(s)
 				return
 			}
