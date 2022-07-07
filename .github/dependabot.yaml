@@ -9,7 +9,7 @@ updates:
     reviewers:
       - "mashiike"
     ignore:
-      - dependency-name: "aws*"
+      - dependency-name: "github.com/aws*"
         update-types: ["version-update:semver-patch"]
     labels:
       - "dependencies"
