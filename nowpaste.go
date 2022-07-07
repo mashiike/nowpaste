@@ -190,7 +190,8 @@ type Content struct {
 	Attachments []slack.Attachment `json:"attachments,omitempty"`
 }
 
-const uploadFilesThreshold = 1024
+// see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
+const uploadFilesThreshold = 4000
 
 func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Channel == "" {
