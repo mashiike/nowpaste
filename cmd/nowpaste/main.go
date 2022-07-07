@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -46,7 +45,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if ssmPath := os.Getenv("NOWPASTE_SSM_PATH"); ssmPath != "" {
-		flag.VisitAll(SSMParameterToFlag(ctx, ssmPath, "NOWPASTE_"))
+		flag.VisitAll(SSMParameterPathToFlag(ctx, ssmPath, "NOWPASTE_"))
+	}
+	if ssmNames := os.Getenv("NOWPASTE_SSM_NAMES"); ssmNames != "" {
+		flag.VisitAll(SSMParameterNamesToFlag(ctx, ssmNames, "NOWPASTE_"))
 	}
 	flag.VisitAll(flagx.EnvToFlagWithPrefix("NOWPASTE_"))
 	flag.Parse()
@@ -59,15 +61,67 @@ func main() {
 	ridge.RunWithContext(ctx, listen, pathPrefix, mux)
 }
 
-func SSMParameterToFlag(ctx context.Context, ssmPath string, prefix string) func(*flag.Flag) {
+func SSMParameterPathToFlag(ctx context.Context, ssmPath string, prefix string) func(*flag.Flag) {
+	client, err := newSSMClient(ctx)
+	if err != nil {
+		log.Printf("[warn] ssm parameter path to flag: %s", err.Error())
+		return func(_ *flag.Flag) {}
+	}
+	log.Printf("[info] Get SSM Parameter by path: %s", ssmPath)
+	p := ssm.NewGetParametersByPathPaginator(client, &ssm.GetParametersByPathInput{
+		Path:           aws.String(ssmPath),
+		WithDecryption: *aws.Bool(true),
+		Recursive:      *aws.Bool(true),
+	})
+	values := make(map[string]string)
+	for p.HasMorePages() {
+		output, err := p.NextPage(ctx)
+		if err != nil {
+			log.Printf("[warn] ssm parameter path to flag: %s", err.Error())
+			return func(_ *flag.Flag) {}
+		}
+		for _, param := range output.Parameters {
+			log.Printf("[debug] Get SSM Parameter: %s", *param.Name)
+			values[*param.Name] = *param.Value
+		}
+	}
+	log.Printf("[info] Get %d SSM Parameters by path", len(values))
+	return newLookupFunc(values, prefix)
+}
+
+func SSMParameterNamesToFlag(ctx context.Context, names string, prefix string) func(*flag.Flag) {
+	client, err := newSSMClient(ctx)
+	if err != nil {
+		log.Printf("[warn] ssm parameter names to flag: %s", err.Error())
+		return func(_ *flag.Flag) {}
+	}
+	parameterNames := strings.Split(names, ",")
+	values := make(map[string]string, len(parameterNames))
+	for _, parameterName := range parameterNames {
+		log.Printf("[info] Get SSM Parameter: %s", parameterName)
+		output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
+			Name:           aws.String(strings.TrimSpace(strings.Trim(parameterName, ","))),
+			WithDecryption: *aws.Bool(true),
+		})
+		if err != nil {
+			log.Printf("[warn] ssm parameter names to flag: %s", err.Error())
+			return func(_ *flag.Flag) {}
+		}
+		log.Printf("[debug] Get SSM Parameter: %s", *output.Parameter.Name)
+		values[*output.Parameter.Name] = *output.Parameter.Value
+	}
+	log.Printf("[info] Get %d SSM Parameters by names", len(values))
+	return newLookupFunc(values, prefix)
+}
+
+func newSSMClient(ctx context.Context) (*ssm.Client, error) {
 	opts := make([]func(*config.LoadOptions) error, 0)
 	if region := os.Getenv("AWS_DEFAULT_REGION"); region != "" {
 		opts = append(opts, config.WithRegion(region))
 	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		log.Printf("[warn] ssm parameter to flag: %s", err.Error())
-		return func(_ *flag.Flag) {}
+		return nil, err
 	}
 	ssmOpts := make([]func(*ssm.Options), 0)
 	if endpoint := os.Getenv("SSM_ENDPOINT"); endpoint != "" {
@@ -80,25 +134,10 @@ func SSMParameterToFlag(ctx context.Context, ssmPath string, prefix string) func
 		}))
 	}
 	client := ssm.NewFromConfig(awsCfg, ssmOpts...)
-	log.Printf("[info] Get SSM Parameter by path: %s", ssmPath)
-	p := ssm.NewGetParametersByPathPaginator(client, &ssm.GetParametersByPathInput{
-		Path:           aws.String(ssmPath),
-		WithDecryption: *aws.Bool(true),
-		Recursive:      *aws.Bool(true),
-	})
-	values := make(map[string]string)
-	for p.HasMorePages() {
-		output, err := p.NextPage(ctx)
-		if err != nil {
-			log.Printf("[warn] ssm parameter to flag: %s", err.Error())
-			return func(_ *flag.Flag) {}
-		}
-		for _, param := range output.Parameters {
-			log.Printf("[debug] Get SSM Parameter: %s", *param.Name)
-			values[*param.Name] = *param.Value
-		}
-	}
-	log.Printf("[info] Get %d SSM Parameters", len(values))
+	return client, nil
+}
+
+func newLookupFunc(values map[string]string, prefix string) func(*flag.Flag) {
 	return func(f *flag.Flag) {
 		names := []string{
 			strings.ToUpper(prefix + strings.ReplaceAll(f.Name, "-", "_")),
@@ -107,11 +146,12 @@ func SSMParameterToFlag(ctx context.Context, ssmPath string, prefix string) func
 			strings.ToLower(strings.ReplaceAll(f.Name, "-", "_")),
 		}
 		for _, name := range names {
-			paramPath := filepath.Join(ssmPath, name)
-			if s, ok := values[paramPath]; ok {
-				log.Printf("[info] use SSM Parameter: %s", paramPath)
-				f.Value.Set(s)
-				return
+			for paramPath, value := range values {
+				if strings.HasSuffix(paramPath, name) {
+					log.Printf("[info] use SSM Parameter: %s", paramPath)
+					f.Value.Set(value)
+					return
+				}
 			}
 		}
 	}
