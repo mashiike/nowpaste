@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,12 +56,28 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 		if username == "" {
 			username = "nowpaste"
 		}
+		escapeTextStr := req.FormValue("escape_text")
+		var escapeText bool
+		if escapeTextStr != "" {
+			if b, err := strconv.ParseBool(escapeTextStr); err == nil {
+				escapeText = b
+			}
+		}
+		codeBlockTextStr := req.FormValue("code_block_text")
+		var codeBlockText bool
+		if codeBlockTextStr != "" {
+			if b, err := strconv.ParseBool(codeBlockTextStr); err == nil {
+				codeBlockText = b
+			}
+		}
 		content = &Content{
-			Channel:   req.FormValue("channel"),
-			Text:      req.FormValue("text"),
-			Username:  username,
-			IconEmoji: req.FormValue("icon_emoji"),
-			IconURL:   req.FormValue("icon_url"),
+			Channel:       req.FormValue("channel"),
+			Text:          req.FormValue("text"),
+			Username:      username,
+			IconEmoji:     req.FormValue("icon_emoji"),
+			IconURL:       req.FormValue("icon_url"),
+			EscapeText:    escapeText,
+			CodeBlockText: codeBlockText,
 		}
 	case "application/json":
 		content = &Content{}
@@ -75,6 +92,24 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
+		username := req.URL.Query().Get("username")
+		if username == "" {
+			username = "nowpaste"
+		}
+		escapeTextStr := req.URL.Query().Get("escape_text")
+		var escapeText bool
+		if escapeTextStr != "" {
+			if b, err := strconv.ParseBool(escapeTextStr); err == nil {
+				escapeText = b
+			}
+		}
+		codeBlockTextStr := req.URL.Query().Get("code_block_text")
+		var codeBlockText bool
+		if codeBlockTextStr != "" {
+			if b, err := strconv.ParseBool(codeBlockTextStr); err == nil {
+				codeBlockText = b
+			}
+		}
 		bs, err := io.ReadAll(req.Body)
 		if err != nil {
 			log.Printf("[info] can not read body: %s", err.Error())
@@ -82,10 +117,13 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		content = &Content{
-			Channel:    channel,
-			Text:       string(bs),
-			Username:   "nowpaste",
-			EscapeText: true,
+			Channel:       channel,
+			Text:          string(bs),
+			Username:      username,
+			EscapeText:    escapeText,
+			CodeBlockText: codeBlockText,
+			IconEmoji:     req.URL.Query().Get("icon_emoji"),
+			IconURL:       req.URL.Query().Get("icon_url"),
 		}
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
@@ -154,6 +192,7 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 			fmt.Fprintf(&out, "Subscribe by %s\n", subscriptionArn)
 		}
 		io.WriteString(&out, n.Message)
+		content.CodeBlockText = true
 		content.Text = out.String()
 	case "Notification":
 		log.Printf("[notice] %s from %s, subject=%s", n.Type, n.TopicArn, n.Subject)
@@ -164,13 +203,28 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		if len(content.Blocks) == 0 && len(content.Attachments) == 0 && content.Text == "" {
 			content.Text = strings.Trim(string(n.Message), "\"")
 		}
+		if content.Text != "" {
+			escapeTextStr := req.URL.Query().Get("escape_text")
+			if escapeTextStr != "" {
+				if b, err := strconv.ParseBool(escapeTextStr); err == nil {
+					content.EscapeText = b
+				}
+			}
+			codeBlockTextStr := req.URL.Query().Get("code_block_text")
+			if codeBlockTextStr != "" {
+				if b, err := strconv.ParseBool(codeBlockTextStr); err == nil {
+					content.CodeBlockText = b
+				}
+			}
+		}
 	}
 	content.Channel = channel
 	if content.IconEmoji == "" && content.IconURL == "" {
-		content.IconEmoji = ":amazonsns:"
+		content.IconEmoji = req.URL.Query().Get("icon_emoji")
+		content.IconURL = req.URL.Query().Get("icon_url")
 	}
 	if content.Username == "" {
-		content.Username = "AmazonSNS"
+		content.Username = req.URL.Query().Get("username")
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
 		log.Printf("[warn] %s post failed: %s", n.TopicArn, err.Error())
