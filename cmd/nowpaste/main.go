@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -16,6 +17,10 @@ import (
 	"github.com/fujiwara/ridge"
 	flagx "github.com/ken39arg/go-flagx"
 	"github.com/mashiike/nowpaste"
+)
+
+var (
+	Version = "current"
 )
 
 func main() {
@@ -38,6 +43,11 @@ func main() {
 		listen     string
 		token      string
 	)
+	flag.CommandLine.Usage = func() {
+		fmt.Fprintln(flag.CommandLine.Output(), "nowpaste [options]")
+		fmt.Fprintln(flag.CommandLine.Output(), "version:", Version)
+		flag.CommandLine.PrintDefaults()
+	}
 	flag.StringVar(&minLevel, "log-level", "info", "log level")
 	flag.StringVar(&pathPrefix, "path-prefix", "/", "endpoint path prefix")
 	flag.StringVar(&listen, "listen", ":8080", "http server run on")
