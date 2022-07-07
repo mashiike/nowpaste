@@ -172,11 +172,8 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	if content.Username == "" {
 		content.Username = "AmazonSNS"
 	}
-	log.Printf("[debug] try post message to %s", channel)
 	if err := nwp.postContent(req.Context(), content); err != nil {
-		log.Printf("[error] %s post failed: %s", n.TopicArn, err.Error())
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+		log.Printf("[warn] %s post failed: %s", n.TopicArn, err.Error())
 	}
 	w.WriteHeader(http.StatusOK)
 	io.WriteString(w, http.StatusText(http.StatusOK))
@@ -193,17 +190,41 @@ type Content struct {
 	Attachments []slack.Attachment `json:"attachments,omitempty"`
 }
 
+const uploadFilesThreshold = 1024
+
 func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Channel == "" {
 		return errors.New("channel is required")
 	}
-	if len(content.Text) >= 256 {
+	if len(content.Text) >= uploadFilesThreshold {
+		log.Printf("[info] text over %d characters, try upload file to %s", uploadFilesThreshold, content.Channel)
 		f, err := nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
 			Channels: []string{content.Channel},
 			Content:  content.Text,
 		})
 		if err != nil {
-			return err
+			var ser slack.SlackErrorResponse
+			if !errors.As(err, &ser) {
+				return fmt.Errorf("upload files: %w", err)
+			}
+			if ser.Err != "not_in_channel" {
+				log.Printf("[debug] try upload files, slack error response: %s", ser.Error())
+				return fmt.Errorf("upload files: %w", ser)
+			}
+
+			log.Printf("[warn] try upload files but not in channel, try join channel to %s", content.Channel)
+			_, _, _, err = nwp.client.JoinConversationContext(ctx, content.Channel)
+			if err != nil {
+				log.Printf("[debug] join channel: %#v", err)
+				return fmt.Errorf("join channel may be not channel id: %w", err)
+			}
+			f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
+				Channels: []string{content.Channel},
+				Content:  content.Text,
+			})
+			if err != nil {
+				return fmt.Errorf("retry upload files: %w", err)
+			}
 		}
 		log.Printf("[info] upload File to %s, file id is `%s`", content.Channel, f.ID)
 		return nil
@@ -230,9 +251,10 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Text != "" {
 		opts = append(opts, slack.MsgOptionText(content.Text, content.EscapeText))
 	}
+	log.Printf("[debug] try post message to %s", content.Channel)
 	postedChannelID, postedTimestamp, err := nwp.client.PostMessageContext(ctx, content.Channel, opts...)
 	if err != nil {
-		return err
+		return fmt.Errorf("post message: %w", err)
 	}
 	if postedChannelID == content.Channel {
 		log.Printf("[info] post Message to %s at %s", postedChannelID, postedTimestamp)
