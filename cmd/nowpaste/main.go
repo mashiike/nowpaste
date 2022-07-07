@@ -98,7 +98,7 @@ func SSMParameterNamesToFlag(ctx context.Context, names string, prefix string) f
 	parameterNames := strings.Split(names, ",")
 	values := make(map[string]string, len(parameterNames))
 	for _, parameterName := range parameterNames {
-		log.Printf("[info] Get SSM Parameter: %s", parameterName)
+		log.Printf("[debug] Get SSM Parameter: %s", parameterName)
 		output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
 			Name:           aws.String(strings.TrimSpace(strings.Trim(parameterName, ","))),
 			WithDecryption: *aws.Bool(true),
@@ -110,7 +110,7 @@ func SSMParameterNamesToFlag(ctx context.Context, names string, prefix string) f
 		log.Printf("[debug] Get SSM Parameter: %s", *output.Parameter.Name)
 		values[*output.Parameter.Name] = *output.Parameter.Value
 	}
-	log.Printf("[info] Get %d SSM Parameters by names", len(values))
+	log.Printf("[debug] Get %d SSM Parameters by names", len(values))
 	return newLookupFunc(values, prefix)
 }
 
