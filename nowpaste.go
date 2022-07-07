@@ -180,14 +180,15 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 }
 
 type Content struct {
-	Channel     string             `json:"channel,omitempty"`
-	IconEmoji   string             `json:"icon_emoji,omitempty"`
-	IconURL     string             `json:"icon_url,omitempty"`
-	Username    string             `json:"username"`
-	Blocks      json.RawMessage    `json:"blocks,omitempty"`
-	Text        string             `json:"text,omitempty"`
-	EscapeText  bool               `json:"escape_text,omitempty"`
-	Attachments []slack.Attachment `json:"attachments,omitempty"`
+	Channel       string             `json:"channel,omitempty"`
+	IconEmoji     string             `json:"icon_emoji,omitempty"`
+	IconURL       string             `json:"icon_url,omitempty"`
+	Username      string             `json:"username"`
+	Blocks        json.RawMessage    `json:"blocks,omitempty"`
+	Text          string             `json:"text,omitempty"`
+	EscapeText    bool               `json:"escape_text,omitempty"`
+	CodeBlockText bool               `json:"code_block_text,omitempty"`
+	Attachments   []slack.Attachment `json:"attachments,omitempty"`
 }
 
 // see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
@@ -250,6 +251,9 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 		opts = append(opts, slack.MsgOptionAttachments(content.Attachments...))
 	}
 	if content.Text != "" {
+		if content.CodeBlockText {
+			content.Text = "```" + content.Text + "```"
+		}
 		opts = append(opts, slack.MsgOptionText(content.Text, content.EscapeText))
 	}
 	log.Printf("[debug] try post message to %s", content.Channel)
