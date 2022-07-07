@@ -128,11 +128,7 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	content := &Content{
-		Channel:   channel,
-		IconEmoji: ":amazonsns:",
-		Username:  "AmazonSNS",
-	}
+	content := &Content{}
 	switch n.Type {
 	case "SubscriptionConfirmation":
 		arnObj, err := arn.Parse(n.TopicArn)
@@ -169,6 +165,14 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 			content.Text = strings.Trim(string(n.Message), "\"")
 		}
 	}
+	content.Channel = channel
+	if content.IconEmoji == "" && content.IconURL == "" {
+		content.IconEmoji = ":amazonsns:"
+	}
+	if content.Username == "" {
+		content.Username = "AmazonSNS"
+	}
+	log.Printf("[debug] try post message to %s", channel)
 	if err := nwp.postContent(req.Context(), content); err != nil {
 		log.Printf("[error] %s post failed: %s", n.TopicArn, err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
