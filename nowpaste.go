@@ -35,7 +35,7 @@ func New(slackToken string) *NowPaste {
 
 func (nwp *NowPaste) setRoute() {
 	nwp.router.HandleFunc("/", nwp.postDefault).Methods(http.MethodPost)
-	nwp.router.HandleFunc("/sns/{channel}", nwp.postSNS).Methods(http.MethodPost)
+	nwp.router.HandleFunc("/amazon-sns/{channel}", nwp.postSNS).Methods(http.MethodPost)
 }
 
 func (nwp *NowPaste) ServeHTTP(w http.ResponseWriter, req *http.Request) {
