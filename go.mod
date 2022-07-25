@@ -12,7 +12,7 @@ require (
 	github.com/fujiwara/ridge v0.6.1
 	github.com/gorilla/mux v1.8.0
 	github.com/ken39arg/go-flagx v0.0.0-20220608183922-7cf7c6c0093c
-	github.com/slack-go/slack v0.11.0
+	github.com/slack-go/slack v0.11.2
 )
 
 require (
