@@ -253,8 +253,11 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Channel == "" {
 		return errors.New("channel is required")
 	}
-	if len(content.Text) >= uploadFilesThreshold || strings.Count(content.Text, "\n") >= linesThreshold {
-		log.Printf("[info] text over %d characters, try upload file to %s", uploadFilesThreshold, content.Channel)
+	textSize := len(content.Text)
+	textLines := strings.Count(content.Text, "\n") + 1
+	log.Printf("[debug] content.Text: textSize=%d textLines=%d", textSize, textLines)
+	if textSize >= uploadFilesThreshold || textLines >= linesThreshold {
+		log.Printf("[info] text over %d characters or over %d lines, try upload file to %s", uploadFilesThreshold, textLines, content.Channel)
 		f, err := nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
 			Channels: []string{content.Channel},
 			Content:  content.Text,
