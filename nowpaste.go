@@ -247,12 +247,13 @@ type Content struct {
 
 // see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
 const uploadFilesThreshold = 4000
+const linesThreshold = 10
 
 func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Channel == "" {
 		return errors.New("channel is required")
 	}
-	if len(content.Text) >= uploadFilesThreshold {
+	if len(content.Text) >= uploadFilesThreshold || strings.Count(content.Text, "\n") >= linesThreshold {
 		log.Printf("[info] text over %d characters, try upload file to %s", uploadFilesThreshold, content.Channel)
 		f, err := nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
 			Channels: []string{content.Channel},
