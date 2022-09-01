@@ -265,7 +265,7 @@ func (content *Content) IsRich() bool {
 
 // see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
 const uploadFilesThreshold = 4000
-const linesThreshold = 10
+const linesThreshold = 6
 
 func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Channel == "" {
