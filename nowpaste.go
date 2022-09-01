@@ -46,11 +46,10 @@ func (nwp *NowPaste) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	decoder := json.NewDecoder(req.Body)
 	var content *Content
 	contentType := req.Header.Get("Content-Type")
 	log.Printf("[debug] Content-Type: %s", contentType)
-	switch contentType {
+	switch strings.ToLower(contentType) {
 	case "application/x-www-form-urlencoded":
 		username := req.FormValue("username")
 		if username == "" {
@@ -81,10 +80,25 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 		}
 	case "application/json":
 		content = &Content{}
+		var buf bytes.Buffer
+		decoder := json.NewDecoder(io.TeeReader(req.Body, &buf))
 		if err := decoder.Decode(content); err != nil {
 			log.Printf("[info] can not read as json: %s", err.Error())
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
+		}
+		if !content.IsRich() {
+			content.Text = buf.String()
+			content.CodeBlockText = true
+			if content.Channel == "" {
+				content.Channel = req.URL.Query().Get("channel")
+			}
+			if content.Username == "" {
+				content.Username = req.URL.Query().Get("username")
+				if content.Username == "" {
+					content.Username = "nowpaste"
+				}
+			}
 		}
 	default:
 		channel := req.URL.Query().Get("channel")
@@ -200,7 +214,7 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		if err := decoder.Decode(&content); err != nil {
 			content.Text = strings.Trim(string(n.Message), "\"")
 		}
-		if len(content.Blocks) == 0 && len(content.Attachments) == 0 && content.Text == "" {
+		if !content.IsRich() {
 			content.Text = strings.Trim(string(n.Message), "\"")
 		}
 		if content.Text != "" {
@@ -243,6 +257,10 @@ type Content struct {
 	EscapeText    bool               `json:"escape_text,omitempty"`
 	CodeBlockText bool               `json:"code_block_text,omitempty"`
 	Attachments   []slack.Attachment `json:"attachments,omitempty"`
+}
+
+func (content *Content) IsRich() bool {
+	return len(content.Blocks) > 0 || len(content.Attachments) > 0 || content.Text != ""
 }
 
 // see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
