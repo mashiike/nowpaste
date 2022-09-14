@@ -1,0 +1,18 @@
+{
+  "Description": "https://github.com/mashiike/nowpaste",
+  "Environment": {
+    "Variables": {
+      "NOWPASTE_SSM_NAMES": "/nowpaste/SLACK_TOKEN",
+      "NOWPASTE_LOG_LEVEL": "debug"
+    }
+  },
+  "FunctionName": "nowpaste",
+  "Handler": "bootstrap",
+  "MemorySize": 128,
+  "Role": "{{ tfstate `aws_iam_role.nowpaste.arn` }}",
+  "Runtime": "provided.al2",
+  "Timeout": 600,
+  "TracingConfig": {
+    "Mode": "PassThrough"
+  }
+}
