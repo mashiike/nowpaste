@@ -21,8 +21,10 @@ import (
 )
 
 type NowPaste struct {
-	router *mux.Router
-	client *slack.Client
+	router    *mux.Router
+	client    *slack.Client
+	basicUser *string
+	basicPass *string
 }
 
 func New(slackToken string) *NowPaste {
@@ -34,6 +36,11 @@ func New(slackToken string) *NowPaste {
 	return nwp
 }
 
+func (nwp *NowPaste) SetBasicAuth(user string, pass string) {
+	nwp.basicUser = &user
+	nwp.basicPass = &pass
+}
+
 func (nwp *NowPaste) setRoute() {
 	nwp.router.HandleFunc("/", nwp.postDefault).Methods(http.MethodPost)
 	nwp.router.HandleFunc("/amazon-sns/{channel}", nwp.postSNS).Methods(http.MethodPost)
@@ -41,7 +48,22 @@ func (nwp *NowPaste) setRoute() {
 
 func (nwp *NowPaste) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	log.Printf("[notice] %s %s", req.Method, req.URL.String())
+	if nwp.basicUser != nil && nwp.basicPass != nil {
+		if !nwp.CheckBasicAuth(req) {
+			w.Header().Add("WWW-Authenticate", `Basic realm="SECRET AREA"`)
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+	}
 	nwp.router.ServeHTTP(w, req)
+}
+
+func (nwp *NowPaste) CheckBasicAuth(req *http.Request) bool {
+	clientID, clientSecret, ok := req.BasicAuth()
+	if !ok {
+		return false
+	}
+	return clientID == *nwp.basicUser && clientSecret == *nwp.basicPass
 }
 
 func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
