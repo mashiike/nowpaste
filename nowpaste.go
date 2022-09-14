@@ -125,7 +125,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	default:
 		channel := req.URL.Query().Get("channel")
 		if channel == "" {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			http.Error(w, "query param `channel` is required", http.StatusBadRequest)
 			return
 		}
 		username := req.URL.Query().Get("username")
