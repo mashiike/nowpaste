@@ -222,13 +222,13 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 			break
 		}
 		var out bytes.Buffer
-		fmt.Fprintf(&out, "this message posted by nowpaste\n\n")
+		fmt.Fprintf(&out, "this message posted by nowpaste\n")
 		fmt.Fprintf(&out, "%s from %s\n", n.Type, n.TopicArn)
 		if subscriptionArn := req.Header.Get("x-amz-sns-subscription-arn"); subscriptionArn != "" {
 			fmt.Fprintf(&out, "Subscribe by %s\n", subscriptionArn)
 		}
 
-		fmt.Fprintf(&out, "You have chosen to subscribe to the topic %s.\n\n", n.TopicArn)
+		fmt.Fprintf(&out, "You have chosen to subscribe to the topic %s.\n", n.TopicArn)
 		fmt.Fprintln(&out, "This Subscription was automatically confirmed by nowpaste.")
 		content.CodeBlockText = true
 		content.Text = out.String()
