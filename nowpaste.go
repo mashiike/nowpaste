@@ -222,12 +222,14 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 			break
 		}
 		var out bytes.Buffer
-		fmt.Fprintf(&out, "this message posted by nowpaste\n")
+		fmt.Fprintf(&out, "this message posted by nowpaste\n\n")
 		fmt.Fprintf(&out, "%s from %s\n", n.Type, n.TopicArn)
 		if subscriptionArn := req.Header.Get("x-amz-sns-subscription-arn"); subscriptionArn != "" {
 			fmt.Fprintf(&out, "Subscribe by %s\n", subscriptionArn)
 		}
-		io.WriteString(&out, n.Message)
+
+		fmt.Fprintf(&out, "You have chosen to subscribe to the topic %s.\n", n.TopicArn)
+		fmt.Fprintln(&out, "This Subscription was automatically confirmed by nowpaste.")
 		content.CodeBlockText = true
 		content.Text = out.String()
 	case "Notification":
@@ -296,7 +298,7 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	textSize := len(content.Text)
 	textLines := strings.Count(content.Text, "\n") + 1
 	log.Printf("[debug] content.Text: textSize=%d textLines=%d", textSize, textLines)
-	if textSize >= uploadFilesThreshold || textLines >= linesThreshold {
+	if textSize >= uploadFilesThreshold || (textLines >= linesThreshold && !content.CodeBlockText) {
 		log.Printf("[info] text over %d characters or over %d lines, try upload file to %s", uploadFilesThreshold, textLines, content.Channel)
 		f, err := nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
 			Channels: []string{content.Channel},
