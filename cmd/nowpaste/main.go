@@ -42,6 +42,8 @@ func main() {
 		pathPrefix string
 		listen     string
 		token      string
+		basicUser  string
+		basicPass  string
 	)
 	flag.CommandLine.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "nowpaste [options]")
@@ -52,6 +54,8 @@ func main() {
 	flag.StringVar(&pathPrefix, "path-prefix", "/", "endpoint path prefix")
 	flag.StringVar(&listen, "listen", ":8080", "http server run on")
 	flag.StringVar(&token, "slack-token", "", "slack token")
+	flag.StringVar(&basicUser, "basic-user", "", "basic auth user")
+	flag.StringVar(&basicPass, "basic-pass", "", "basic auth pass")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if ssmPath := os.Getenv("NOWPASTE_SSM_PATH"); ssmPath != "" {
@@ -67,8 +71,11 @@ func main() {
 	if token == "" {
 		log.Fatalln("[error] slack-token is required")
 	}
-	mux := nowpaste.New(token)
-	ridge.RunWithContext(ctx, listen, pathPrefix, mux)
+	app := nowpaste.New(token)
+	if basicUser != "" && basicPass != "" {
+		app.SetBasicAuth(basicUser, basicPass)
+	}
+	ridge.RunWithContext(ctx, listen, pathPrefix, app)
 }
 
 func SSMParameterPathToFlag(ctx context.Context, ssmPath string, prefix string) func(*flag.Flag) {

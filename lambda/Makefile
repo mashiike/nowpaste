@@ -34,13 +34,19 @@ download/%:
 	tar xf nowpaste_$*_${GOOS}_${GOARCH}.tar.gz -C ./
 	mv ./nowpaste $@
 
-bootstrap:
+bootstrap: ../cmd/nowpaste/*.go ../*.go ../go.*
 	go build -o bootstrap ../cmd/nowpaste/main.go
 
 .PHONY: plan
 deploy: bootstrap
 	lambroll deploy --tfstate .terraform/terraform.tfstate
 
+logs:
+	lambroll logs --follow --format=short --tfstate .terraform/terraform.tfstate
+
 clean:
 	@rm -f bootstrap
 	@rm -f nowpaste_*.tar.gz
+
+send/%:
+	cat sample.txt | curl -d @- -H "Content-Type: text/plain" $(shell tfstate-lookup --state .terraform/terraform.tfstate aws_lambda_function_url.nowpaste.function_url)?code_block_text=true\&channel=$*
