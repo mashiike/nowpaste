@@ -24,6 +24,8 @@ If a secret named `nowpaste/SLACK_TOKEN` is managed in AWS Secrets Manager and t
 $ export NOWPASTE_SSM_NAMES=/aws/reference/secretsmanager/nowpaste/SLACK_TOKEN
 ```
 
+For more information: prese refer to [lambda directory](lambda/) 
+
 ### slack token permissions
 
 It is assumed that nowpaste is passed the bot token of the slack app.
