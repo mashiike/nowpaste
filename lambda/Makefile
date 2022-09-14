@@ -30,7 +30,7 @@ plan:
 	terraform plan
 
 download/%:
-		curl -sL https://github.com/mashiike/nowpaste/releases/download/v$*/nowpaste_$*_${GOOS}_${GOARCH}.tar.gz -o  nowpaste_$*_${GOOS}_${GOARCH}.tar.gz
+	curl -sL https://github.com/mashiike/nowpaste/releases/download/v$*/nowpaste_$*_${GOOS}_${GOARCH}.tar.gz -o  nowpaste_$*_${GOOS}_${GOARCH}.tar.gz
 	tar xf nowpaste_$*_${GOOS}_${GOARCH}.tar.gz -C ./
 	mv ./nowpaste $@
 
