@@ -28,9 +28,13 @@ type NowPaste struct {
 }
 
 func New(slackToken string) *NowPaste {
+	return newWithClient(slack.New(slackToken))
+}
+
+func newWithClient(client *slack.Client) *NowPaste {
 	nwp := &NowPaste{
 		router: mux.NewRouter(),
-		client: slack.New(slackToken),
+		client: client,
 	}
 	nwp.setRoute()
 	return nwp

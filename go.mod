@@ -12,6 +12,7 @@ require (
 	github.com/fujiwara/ridge v0.6.1
 	github.com/gorilla/mux v1.8.0
 	github.com/ken39arg/go-flagx v0.0.0-20220608183922-7cf7c6c0093c
+	github.com/sebdah/goldie/v2 v2.5.3
 	github.com/slack-go/slack v0.12.1
 )
 
@@ -33,5 +34,7 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/pires/go-proxyproto v0.6.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/sergi/go-diff v1.0.0 // indirect
 	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 )
