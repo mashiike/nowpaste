@@ -43,14 +43,14 @@ type postRootTestCase struct {
 	newRequestBody        func(t *testing.T) io.Reader
 }
 
-func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, namePrefix string, middlewares ...func(func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request)) {
+func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...func(func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request)) {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		dump, err := httputil.DumpRequestOut(r, true)
 		if err != nil {
 			t.Error("request dump error:", err)
 			t.FailNow()
 		}
-		g.Assert(t, namePrefix+c.name, dump)
+		g.Assert(t, c.name, dump)
 		fp, err := os.Open(c.slackResponseBodyFile)
 		if err != nil {
 			t.Error("can not open response data:", err)
@@ -117,11 +117,32 @@ var postRootTestCases []postRootTestCase = []postRootTestCase{
 
 func TestPostRootSuccess(t *testing.T) {
 	g := goldie.New(t,
-		goldie.WithFixtureDir("testdata/success/"),
+		goldie.WithFixtureDir("testdata/post_root_success/"),
 	)
 	for _, c := range postRootTestCases {
 		t.Run(c.name, func(t *testing.T) {
-			c.Run(t, g, "post_root_success__")
+			c.Run(t, g)
+		})
+	}
+}
+
+func TestPostRootRetryOnce(t *testing.T) {
+	g := goldie.New(t,
+		goldie.WithFixtureDir("testdata/post_root_retry_once/"),
+	)
+	for _, c := range postRootTestCases {
+		t.Run(c.name, func(t *testing.T) {
+			i := 0
+			c.Run(t, g, func(next func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+				return func(w http.ResponseWriter, r *http.Request) {
+					if i == 0 {
+						w.Header().Set("Retry-After", "1")
+						w.WriteHeader(http.StatusTooManyRequests)
+						i++
+					}
+					next(w, r)
+				}
+			})
 		})
 	}
 }

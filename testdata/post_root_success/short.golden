@@ -1,0 +1,8 @@
+POST /api/chat.postMessage HTTP/1.1
+Host: slack.com
+User-Agent: Go-http-client/1.1
+Content-Length: 59
+Content-Type: application/x-www-form-urlencoded
+Accept-Encoding: gzip
+
+channel=%23test&text=this+is+test+message&token=dummy_token
