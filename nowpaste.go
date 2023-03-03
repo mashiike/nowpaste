@@ -3,14 +3,18 @@ package nowpaste
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -167,6 +171,13 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
+		var rle *slack.RateLimitedError
+		if errors.As(err, &rle) {
+			log.Printf("[warn] rate limit: %s", err.Error())
+			w.Header().Add("Retry-After", rle.RetryAfter.String())
+			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			return
+		}
 		log.Printf("[error] post failed: %s", err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -269,6 +280,13 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		content.Username = req.URL.Query().Get("username")
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
+		var rle *slack.RateLimitedError
+		if errors.As(err, &rle) {
+			log.Printf("[warn] rate limit: %s", err.Error())
+			w.Header().Add("Retry-After", rle.RetryAfter.String())
+			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			return
+		}
 		log.Printf("[warn] %s post failed: %s", n.TopicArn, err.Error())
 	}
 	w.WriteHeader(http.StatusOK)
@@ -295,6 +313,11 @@ func (content *Content) IsRich() bool {
 const uploadFilesThreshold = 4000
 const linesThreshold = 6
 
+var apiRetrier = &retrier{
+	timeout: 10 * time.Second,
+	jitter:  500 * time.Millisecond,
+}
+
 func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	if content.Channel == "" {
 		return errors.New("channel is required")
@@ -304,11 +327,19 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	log.Printf("[debug] content.Text: textSize=%d textLines=%d", textSize, textLines)
 	if textSize >= uploadFilesThreshold || (textLines >= linesThreshold && !content.CodeBlockText) {
 		log.Printf("[info] text over %d characters or over %d lines, try upload file to %s", uploadFilesThreshold, textLines, content.Channel)
-		f, err := nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
-			Channels: []string{content.Channel},
-			Content:  content.Text,
+		var f *slack.File
+		err, timeout := apiRetrier.Do(ctx, func() error {
+			var err error
+			f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
+				Channels: []string{content.Channel},
+				Content:  content.Text,
+			})
+			return err
 		})
 		if err != nil {
+			if timeout {
+				return err
+			}
 			var ser slack.SlackErrorResponse
 			if !errors.As(err, &ser) {
 				return fmt.Errorf("upload files: %w", err)
@@ -319,14 +350,21 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 			}
 
 			log.Printf("[warn] try upload files but not in channel, try join channel to %s", content.Channel)
-			_, _, _, err = nwp.client.JoinConversationContext(ctx, content.Channel)
+			err, _ = apiRetrier.Do(ctx, func() error {
+				_, _, _, err := nwp.client.JoinConversationContext(ctx, content.Channel)
+				return err
+			})
 			if err != nil {
 				log.Printf("[debug] join channel: %#v", err)
 				return fmt.Errorf("join channel may be not channel id: %w", err)
 			}
-			f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
-				Channels: []string{content.Channel},
-				Content:  content.Text,
+			err, _ = apiRetrier.Do(ctx, func() error {
+				var err error
+				f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
+					Channels: []string{content.Channel},
+					Content:  content.Text,
+				})
+				return err
 			})
 			if err != nil {
 				return fmt.Errorf("retry upload files: %w", err)
@@ -361,7 +399,12 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 		opts = append(opts, slack.MsgOptionText(content.Text, content.EscapeText))
 	}
 	log.Printf("[debug] try post message to %s", content.Channel)
-	postedChannelID, postedTimestamp, err := nwp.client.PostMessageContext(ctx, content.Channel, opts...)
+	var postedChannelID, postedTimestamp string
+	err, _ := apiRetrier.Do(ctx, func() error {
+		var err error
+		postedChannelID, postedTimestamp, err = nwp.client.PostMessageContext(ctx, content.Channel, opts...)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("post message: %w", err)
 	}
@@ -371,4 +414,51 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 		log.Printf("[info] post Message to %s(%s) at %s", content.Channel, postedChannelID, postedTimestamp)
 	}
 	return nil
+}
+
+type retrier struct {
+	timeout time.Duration
+	jitter  time.Duration
+	mu      sync.Mutex
+	rand    *rand.Rand
+}
+
+func (r *retrier) Do(ctx context.Context, f func() error) (error, bool) {
+	start := time.Now()
+	err := f()
+	var t *time.Timer
+	var rle *slack.RateLimitedError
+	for err != nil && errors.As(err, &rle) && rle.Retryable() {
+		if time.Since(start) >= r.timeout {
+			return err, true
+		}
+		delay := rle.RetryAfter + r.randomJitter()
+		if t == nil {
+			t = time.NewTimer(delay)
+			defer t.Stop()
+		} else {
+			t.Reset(delay)
+		}
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			return ctx.Err(), true
+		}
+		err = f()
+	}
+	return err, time.Since(start) >= r.timeout
+}
+
+func (r *retrier) randomJitter() time.Duration {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.rand == nil {
+		var seed int64
+		if err := binary.Read(crand.Reader, binary.LittleEndian, &seed); err != nil {
+			seed = time.Now().UnixNano()
+		}
+		r.rand = rand.New(rand.NewSource(seed))
+	}
+	return time.Duration(r.rand.Int63n(int64(r.jitter)))
 }

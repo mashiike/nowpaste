@@ -34,22 +34,135 @@ func (f mockSlackServer) Do(r *http.Request) (*http.Response, error) {
 	return w.Result(), nil
 }
 
+type postRootTestCase struct {
+	name                  string
+	slackResponseHeaders  map[string]string
+	slackResponseBodyFile string
+	slackResponseStatus   int
+	requestHeaders        map[string]string
+	newRequestBody        func(t *testing.T) io.Reader
+	expectedStatus        int
+}
+
+func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...func(func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request)) {
+	f := func(w http.ResponseWriter, r *http.Request) {
+		dump, err := httputil.DumpRequestOut(r, true)
+		if err != nil {
+			t.Error("request dump error:", err)
+			t.FailNow()
+		}
+		g.Assert(t, c.name, dump)
+		for key, value := range c.slackResponseHeaders {
+			w.Header().Set(key, value)
+		}
+		w.WriteHeader(c.slackResponseStatus)
+		if c.slackResponseBodyFile != "" {
+			fp, err := os.Open(c.slackResponseBodyFile)
+			if err != nil {
+				t.Error("can not open response data:", err)
+				t.FailNow()
+			}
+			defer fp.Close()
+			io.Copy(w, fp)
+		}
+	}
+	for _, m := range middlewares {
+		f = m(f)
+	}
+	client := newWithClient(slack.New("dummy_token", slack.OptionHTTPClient(
+		mockSlackServer(f),
+	)))
+
+	req := httptest.NewRequest(http.MethodPost, "/", c.newRequestBody(t))
+	for key, value := range c.requestHeaders {
+		req.Header.Add(key, value)
+	}
+	w := httptest.NewRecorder()
+	client.ServeHTTP(w, req)
+	resp := w.Result()
+	if resp.StatusCode != c.expectedStatus {
+		t.Error("http status unexpected ", resp)
+	}
+}
+
+var postRootTestCases []postRootTestCase = []postRootTestCase{
+	{
+		name:                  "short",
+		slackResponseBodyFile: "testdata/example_chat_post_message_response.json",
+		slackResponseStatus:   http.StatusOK,
+		requestHeaders: map[string]string{
+			"Content-Type": "application/json",
+		},
+		newRequestBody: func(t *testing.T) io.Reader {
+			body, _ := json.Marshal(map[string]string{
+				"channel": "#test",
+				"text":    "this is test message",
+			})
+			return bytes.NewReader(body)
+		},
+		expectedStatus: http.StatusOK,
+	},
+	{
+		name:                  "many_lines",
+		slackResponseBodyFile: "testdata/example_file_upload_response.json",
+		slackResponseStatus:   http.StatusOK,
+		requestHeaders: map[string]string{
+			"Content-Type": "application/json",
+		},
+		newRequestBody: func(t *testing.T) io.Reader {
+			body, _ := json.Marshal(map[string]string{
+				"channel": "#test",
+				"text":    "this is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\n",
+			})
+			return bytes.NewReader(body)
+		},
+		expectedStatus: http.StatusOK,
+	},
+}
+
 func TestPostRootSuccess(t *testing.T) {
 	g := goldie.New(t,
-		goldie.WithFixtureDir("testdata"),
+		goldie.WithFixtureDir("testdata/post_root_success/"),
 	)
-	cases := []struct {
-		name                  string
-		slackResponseHeaders  map[string]string
-		slackResponseBodyFile string
-		slackResponseStatus   int
-		requestHeaders        map[string]string
-		newRequestBody        func(t *testing.T) io.Reader
-	}{
+	for _, c := range postRootTestCases {
+		t.Run(c.name, func(t *testing.T) {
+			c.Run(t, g)
+		})
+	}
+}
+
+func TestPostRootRetryOnce(t *testing.T) {
+	g := goldie.New(t,
+		goldie.WithFixtureDir("testdata/post_root_retry_once/"),
+	)
+	for _, c := range postRootTestCases {
+		t.Run(c.name, func(t *testing.T) {
+			i := 0
+			c.Run(t, g, func(next func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+				return func(w http.ResponseWriter, r *http.Request) {
+					if i == 0 {
+						w.Header().Set("Retry-After", "1")
+						w.WriteHeader(http.StatusTooManyRequests)
+						i++
+					}
+					next(w, r)
+				}
+			})
+		})
+	}
+}
+
+func TestPostRootTimeout(t *testing.T) {
+	g := goldie.New(t,
+		goldie.WithFixtureDir("testdata/post_root_timeout/"),
+	)
+	cases := []postRootTestCase{
 		{
-			name:                  "short",
-			slackResponseBodyFile: "testdata/example_chat_post_message_response.json",
-			slackResponseStatus:   http.StatusOK,
+			name: "short",
+			slackResponseHeaders: map[string]string{
+				"Retry-After": "1",
+			},
+			slackResponseStatus: http.StatusTooManyRequests,
 			requestHeaders: map[string]string{
 				"Content-Type": "application/json",
 			},
@@ -60,11 +173,14 @@ func TestPostRootSuccess(t *testing.T) {
 				})
 				return bytes.NewReader(body)
 			},
+			expectedStatus: http.StatusTooManyRequests,
 		},
 		{
-			name:                  "many_lines",
-			slackResponseBodyFile: "testdata/example_file_upload_response.json",
-			slackResponseStatus:   http.StatusOK,
+			name: "many_lines",
+			slackResponseHeaders: map[string]string{
+				"Retry-After": "1",
+			},
+			slackResponseStatus: http.StatusTooManyRequests,
 			requestHeaders: map[string]string{
 				"Content-Type": "application/json",
 			},
@@ -75,41 +191,12 @@ func TestPostRootSuccess(t *testing.T) {
 				})
 				return bytes.NewReader(body)
 			},
+			expectedStatus: http.StatusTooManyRequests,
 		},
 	}
 	for _, c := range cases {
-
-		client := newWithClient(slack.New("dummy_token", slack.OptionHTTPClient(
-			mockSlackServer(func(w http.ResponseWriter, r *http.Request) {
-				dump, err := httputil.DumpRequestOut(r, true)
-				if err != nil {
-					t.Error("request dump error:", err)
-					t.FailNow()
-				}
-				g.Assert(t, "post_root_success__"+c.name, dump)
-				fp, err := os.Open(c.slackResponseBodyFile)
-				if err != nil {
-					t.Error("can not open response data:", err)
-					t.FailNow()
-				}
-				defer fp.Close()
-				for key, value := range c.slackResponseHeaders {
-					w.Header().Set(key, value)
-				}
-				w.WriteHeader(c.slackResponseStatus)
-				io.Copy(w, fp)
-			}),
-		)))
-
-		req := httptest.NewRequest(http.MethodPost, "/", c.newRequestBody(t))
-		for key, value := range c.requestHeaders {
-			req.Header.Add(key, value)
-		}
-		w := httptest.NewRecorder()
-		client.ServeHTTP(w, req)
-		resp := w.Result()
-		if resp.StatusCode != http.StatusOK {
-			t.Error("http status not ok ", resp)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			c.Run(t, g)
+		})
 	}
 }

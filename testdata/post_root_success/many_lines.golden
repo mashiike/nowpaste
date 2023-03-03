@@ -1,0 +1,8 @@
+POST /api/files.upload HTTP/1.1
+Host: slack.com
+User-Agent: Go-http-client/1.1
+Content-Length: 181
+Content-Type: application/x-www-form-urlencoded
+Accept-Encoding: gzip
+
+channels=%23test&content=this+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0A&token=dummy_token
