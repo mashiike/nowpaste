@@ -3,6 +3,7 @@ package nowpaste
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,18 @@ type mockSlackServer func(w http.ResponseWriter, r *http.Request)
 
 func (f mockSlackServer) Do(r *http.Request) (*http.Response, error) {
 	w := httptest.NewRecorder()
-	f(w, r)
+	switch {
+	case r.URL.Path == "/api/auth.test":
+		w.WriteHeader(http.StatusOK)
+		fp, err := os.Open("testdata/example_auth_test_response.json")
+		if err != nil {
+			return nil, fmt.Errorf("example_auth_test_response.json: %w", err)
+		}
+		defer fp.Close()
+		io.Copy(w, fp)
+	default:
+		f(w, r)
+	}
 	return w.Result(), nil
 }
 
@@ -49,6 +61,21 @@ func TestPostRootSuccess(t *testing.T) {
 				return bytes.NewReader(body)
 			},
 		},
+		{
+			name:                  "many_lines",
+			slackResponseBodyFile: "testdata/example_file_upload_response.json",
+			slackResponseStatus:   http.StatusOK,
+			requestHeaders: map[string]string{
+				"Content-Type": "application/json",
+			},
+			newRequestBody: func(t *testing.T) io.Reader {
+				body, _ := json.Marshal(map[string]string{
+					"channel": "#test",
+					"text":    "this is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\n",
+				})
+				return bytes.NewReader(body)
+			},
+		},
 	}
 	for _, c := range cases {
 
@@ -59,12 +86,13 @@ func TestPostRootSuccess(t *testing.T) {
 					t.Error("request dump error:", err)
 					t.FailNow()
 				}
-				g.Assert(t, "post_root_success_"+c.name, dump)
+				g.Assert(t, "post_root_success__"+c.name, dump)
 				fp, err := os.Open(c.slackResponseBodyFile)
 				if err != nil {
 					t.Error("can not open response data:", err)
 					t.FailNow()
 				}
+				defer fp.Close()
 				for key, value := range c.slackResponseHeaders {
 					w.Header().Set(key, value)
 				}
