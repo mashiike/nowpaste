@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.17.5
 	github.com/aws/aws-sdk-go-v2/config v1.17.4
 	github.com/aws/aws-sdk-go-v2/service/sns v1.20.4
-	github.com/aws/aws-sdk-go-v2/service/ssm v1.27.4
+	github.com/aws/aws-sdk-go-v2/service/ssm v1.35.5
 	github.com/fatih/color v1.13.0
 	github.com/fujiwara/logutils v1.1.0
 	github.com/fujiwara/ridge v0.6.1

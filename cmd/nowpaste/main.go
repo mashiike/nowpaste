@@ -87,8 +87,8 @@ func SSMParameterPathToFlag(ctx context.Context, ssmPath string, prefix string) 
 	log.Printf("[info] Get SSM Parameter by path: %s", ssmPath)
 	p := ssm.NewGetParametersByPathPaginator(client, &ssm.GetParametersByPathInput{
 		Path:           aws.String(ssmPath),
-		WithDecryption: *aws.Bool(true),
-		Recursive:      *aws.Bool(true),
+		WithDecryption: aws.Bool(true),
+		Recursive:      aws.Bool(true),
 	})
 	values := make(map[string]string)
 	for p.HasMorePages() {
