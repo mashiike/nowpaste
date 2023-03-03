@@ -171,6 +171,13 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
+		var rle *slack.RateLimitedError
+		if errors.As(err, &rle) {
+			log.Printf("[warn] rate limit: %s", err.Error())
+			w.Header().Add("Retry-After", rle.RetryAfter.String())
+			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			return
+		}
 		log.Printf("[error] post failed: %s", err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -273,6 +280,13 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		content.Username = req.URL.Query().Get("username")
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
+		var rle *slack.RateLimitedError
+		if errors.As(err, &rle) {
+			log.Printf("[warn] rate limit: %s", err.Error())
+			w.Header().Add("Retry-After", rle.RetryAfter.String())
+			http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+			return
+		}
 		log.Printf("[warn] %s post failed: %s", n.TopicArn, err.Error())
 	}
 	w.WriteHeader(http.StatusOK)
