@@ -41,6 +41,7 @@ type postRootTestCase struct {
 	slackResponseStatus   int
 	requestHeaders        map[string]string
 	newRequestBody        func(t *testing.T) io.Reader
+	expectedStatus        int
 }
 
 func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...func(func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request)) {
@@ -51,17 +52,19 @@ func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...fun
 			t.FailNow()
 		}
 		g.Assert(t, c.name, dump)
-		fp, err := os.Open(c.slackResponseBodyFile)
-		if err != nil {
-			t.Error("can not open response data:", err)
-			t.FailNow()
-		}
-		defer fp.Close()
 		for key, value := range c.slackResponseHeaders {
 			w.Header().Set(key, value)
 		}
 		w.WriteHeader(c.slackResponseStatus)
-		io.Copy(w, fp)
+		if c.slackResponseBodyFile != "" {
+			fp, err := os.Open(c.slackResponseBodyFile)
+			if err != nil {
+				t.Error("can not open response data:", err)
+				t.FailNow()
+			}
+			defer fp.Close()
+			io.Copy(w, fp)
+		}
 	}
 	for _, m := range middlewares {
 		f = m(f)
@@ -77,8 +80,8 @@ func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...fun
 	w := httptest.NewRecorder()
 	client.ServeHTTP(w, req)
 	resp := w.Result()
-	if resp.StatusCode != http.StatusOK {
-		t.Error("http status not ok ", resp)
+	if resp.StatusCode != c.expectedStatus {
+		t.Error("http status unexpected ", resp)
 	}
 }
 
@@ -97,6 +100,7 @@ var postRootTestCases []postRootTestCase = []postRootTestCase{
 			})
 			return bytes.NewReader(body)
 		},
+		expectedStatus: http.StatusOK,
 	},
 	{
 		name:                  "many_lines",
@@ -112,6 +116,7 @@ var postRootTestCases []postRootTestCase = []postRootTestCase{
 			})
 			return bytes.NewReader(body)
 		},
+		expectedStatus: http.StatusOK,
 	},
 }
 
@@ -143,6 +148,55 @@ func TestPostRootRetryOnce(t *testing.T) {
 					next(w, r)
 				}
 			})
+		})
+	}
+}
+
+func TestPostRootTimeout(t *testing.T) {
+	g := goldie.New(t,
+		goldie.WithFixtureDir("testdata/post_root_timeout/"),
+	)
+	cases := []postRootTestCase{
+		{
+			name: "short",
+			slackResponseHeaders: map[string]string{
+				"Retry-After": "1",
+			},
+			slackResponseStatus: http.StatusTooManyRequests,
+			requestHeaders: map[string]string{
+				"Content-Type": "application/json",
+			},
+			newRequestBody: func(t *testing.T) io.Reader {
+				body, _ := json.Marshal(map[string]string{
+					"channel": "#test",
+					"text":    "this is test message",
+				})
+				return bytes.NewReader(body)
+			},
+			expectedStatus: http.StatusTooManyRequests,
+		},
+		{
+			name: "many_lines",
+			slackResponseHeaders: map[string]string{
+				"Retry-After": "1",
+			},
+			slackResponseStatus: http.StatusTooManyRequests,
+			requestHeaders: map[string]string{
+				"Content-Type": "application/json",
+			},
+			newRequestBody: func(t *testing.T) io.Reader {
+				body, _ := json.Marshal(map[string]string{
+					"channel": "#test",
+					"text":    "this is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\n",
+				})
+				return bytes.NewReader(body)
+			},
+			expectedStatus: http.StatusTooManyRequests,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			c.Run(t, g)
 		})
 	}
 }
