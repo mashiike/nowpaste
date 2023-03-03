@@ -87,8 +87,8 @@ func SSMParameterPathToFlag(ctx context.Context, ssmPath string, prefix string) 
 	log.Printf("[info] Get SSM Parameter by path: %s", ssmPath)
 	p := ssm.NewGetParametersByPathPaginator(client, &ssm.GetParametersByPathInput{
 		Path:           aws.String(ssmPath),
-		WithDecryption: *aws.Bool(true),
-		Recursive:      *aws.Bool(true),
+		WithDecryption: aws.Bool(true),
+		Recursive:      aws.Bool(true),
 	})
 	values := make(map[string]string)
 	for p.HasMorePages() {
@@ -118,7 +118,7 @@ func SSMParameterNamesToFlag(ctx context.Context, names string, prefix string) f
 		log.Printf("[debug] Get SSM Parameter: %s", parameterName)
 		output, err := client.GetParameter(ctx, &ssm.GetParameterInput{
 			Name:           aws.String(strings.TrimSpace(strings.Trim(parameterName, ","))),
-			WithDecryption: *aws.Bool(true),
+			WithDecryption: aws.Bool(true),
 		})
 		if err != nil {
 			log.Printf("[warn] ssm parameter names to flag: %s", err.Error())
