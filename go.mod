@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sns v1.20.4
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.35.5
 	github.com/fatih/color v1.15.0
-	github.com/fujiwara/logutils v1.1.0
+	github.com/fujiwara/logutils v1.1.2
 	github.com/fujiwara/ridge v0.6.1
 	github.com/gorilla/mux v1.8.0
 	github.com/ken39arg/go-flagx v0.0.0-20220608183922-7cf7c6c0093c
