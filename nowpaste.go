@@ -227,7 +227,7 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	var n HTTPNotification
 	var buf bytes.Buffer
 	decoder := json.NewDecoder(io.TeeReader(req.Body, &buf))
-	if err := decoder.Decode(&n); err != nil {
+	if err := decoder.Decode(&n); err != nil || n.Type == "" {
 		n.Message = buf.String()
 	}
 	log.Println("[info] sns", n.Type, n.TopicArn, n.Subject)
