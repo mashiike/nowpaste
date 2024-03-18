@@ -225,10 +225,10 @@ type HTTPNotification struct {
 func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	var n HTTPNotification
-	decoder := json.NewDecoder(req.Body)
-	if err := decoder.Decode(&n); err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
+	var buf bytes.Buffer
+	decoder := json.NewDecoder(io.TeeReader(req.Body, &buf))
+	if err := decoder.Decode(&n); err != nil || n.Type == "" {
+		n.Message = buf.String()
 	}
 	log.Println("[info] sns", n.Type, n.TopicArn, n.Subject)
 	vars := mux.Vars(req)

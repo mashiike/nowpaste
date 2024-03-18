@@ -109,7 +109,7 @@ func SSMParameterPathToFlag(ctx context.Context, ssmPath string, prefix string) 
 func SSMParameterNamesToFlag(ctx context.Context, names string, prefix string) func(*flag.Flag) {
 	client, err := newSSMClient(ctx)
 	if err != nil {
-		log.Printf("[warn] ssm parameter names to flag: %s", err.Error())
+		log.Printf("[warn] ssm parameter names to flag: new ssm client:%s", err.Error())
 		return func(_ *flag.Flag) {}
 	}
 	parameterNames := strings.Split(names, ",")
@@ -121,7 +121,7 @@ func SSMParameterNamesToFlag(ctx context.Context, names string, prefix string) f
 			WithDecryption: aws.Bool(true),
 		})
 		if err != nil {
-			log.Printf("[warn] ssm parameter names to flag: %s", err.Error())
+			log.Printf("[warn] ssm parameter names to flag: get parameter: %s", err.Error())
 			return func(_ *flag.Flag) {}
 		}
 		log.Printf("[debug] Get SSM Parameter: %s", *output.Parameter.Name)
@@ -136,21 +136,21 @@ func newSSMClient(ctx context.Context) (*ssm.Client, error) {
 	if region := os.Getenv("AWS_DEFAULT_REGION"); region != "" {
 		opts = append(opts, config.WithRegion(region))
 	}
+	if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
+		opts = append(opts, config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL:           endpoint,
+					SigningRegion: region,
+				}, nil
+			},
+		)))
+	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
-	ssmOpts := make([]func(*ssm.Options), 0)
-	if endpoint := os.Getenv("SSM_ENDPOINT"); endpoint != "" {
-		ssm.WithEndpointResolver(ssm.EndpointResolverFunc(func(region string, options ssm.EndpointResolverOptions) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				URL:           endpoint,
-				SigningRegion: region,
-				PartitionID:   "aws",
-			}, nil
-		}))
-	}
-	client := ssm.NewFromConfig(awsCfg, ssmOpts...)
+	client := ssm.NewFromConfig(awsCfg)
 	return client, nil
 }
 
