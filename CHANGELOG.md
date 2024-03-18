@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.5.0](https://github.com/mashiike/nowpaste/compare/v0.4.0...v0.5.0) - 2024-03-18
+- Bump github.com/fatih/color from 1.14.1 to 1.15.0 by @dependabot in https://github.com/mashiike/nowpaste/pull/68
+- Bump github.com/aws/aws-sdk-go-v2/config from 1.17.4 to 1.18.16 by @dependabot in https://github.com/mashiike/nowpaste/pull/67
+- Bump github.com/fujiwara/logutils from 1.1.0 to 1.1.2 by @dependabot in https://github.com/mashiike/nowpaste/pull/66
+- Append New URL Query Parameters `as_file` and `as_message` by @mashiike in https://github.com/mashiike/nowpaste/pull/78
+- long text message trunc by @mashiike in https://github.com/mashiike/nowpaste/pull/79
+- Feature/sns raw message by @mashiike in https://github.com/mashiike/nowpaste/pull/80
+- consider sns message attributes by @mashiike in https://github.com/mashiike/nowpaste/pull/81
+
 ## [v0.4.0](https://github.com/mashiike/nowpaste/compare/v0.3.0...v0.4.0) - 2023-03-03
 - update go 1.20 by @mashiike in https://github.com/mashiike/nowpaste/pull/60
 - Bump github.com/aws/aws-sdk-go-v2/service/ssm from 1.27.4 to 1.35.5 by @dependabot in https://github.com/mashiike/nowpaste/pull/62
