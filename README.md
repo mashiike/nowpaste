@@ -100,6 +100,32 @@ $ cat payload.json  | curl "https://<url_id>.lambda-url.<region>.on.aws/" \
 nowpaste can accept Amazon SNS notification messages.
 Add a SNS topic http(s) endpoint to `https://<url_id>.lambda-url.<region>.on.aws/amazon-sns/{channel_id}`
 
+## Query Parameters/Amazon SNS Message Attribuites for Message Formatting
+
+nowpaste allows you to control the format of the message using either query parameters or Amazon SNS Message Attributes. You can switch the format of the message by adding the following parameters to the URL or setting them as SNS Message Attributes:
+
+- `as_file`: If this parameter is set, the message is posted as a file. Valid values are `true` or `false`. The default is `false`.
+
+- `as_message`: If this parameter is set, the message is posted as a regular text message. Valid values are `true` or `false`. The default is `true`.
+
+For example, to post the message as a file, specify the URL as follows:
+
+```shell
+$ cat payload.json  | curl "https://<url_id>.lambda-url.<region>.on.aws/?as_file=true" \
+    -X POST \
+    -H "Content-type: application/json" \
+    -d @-
+```
+This URL will post the message as a file.
+
+```shell
+$ aws sns publish --topic-arn <topic_arn> --message "Hello world!!" --message-attributes '{"as_file": {"DataType": "String", "StringValue": "true"}}'
+```
+This SNS message will post the message as a file.
+
+If neither `as_file` nor `as_message` is specified, the message will be automatically posted as a file if it exceeds 4000 characters or 6 lines.
+
+
 ## LICENSE
 
 MIT License
