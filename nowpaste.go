@@ -229,8 +229,13 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	decoder := json.NewDecoder(io.TeeReader(req.Body, &buf))
 	if err := decoder.Decode(&n); err != nil || n.Type == "" {
 		n.Message = buf.String()
+		log.Println("[info] maybe raw message derived from SNS")
+		n.MessageId = req.Header.Get("X-Amz-Sns-Message-Id")
+		n.Type = req.Header.Get("X-Amz-Sns-Message-Type")
+		n.TopicArn = req.Header.Get("X-Amz-Sns-Topic-Arn")
 	}
 	log.Println("[info] sns", n.Type, n.TopicArn, n.Subject)
+
 	vars := mux.Vars(req)
 	channel, ok := vars["channel"]
 	if !ok || channel == "" {
@@ -414,6 +419,7 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 }
 
 func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
+	log.Println("[debug] try post as file to ", content.Channel, "text size:", len(content.Text))
 	var f *slack.File
 	err, timeout := apiRetrier.Do(ctx, func() error {
 		var err error
@@ -462,6 +468,7 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 }
 
 func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
+	log.Println("[debug] try post as message to ", content.Channel, "text size:", len(content.Text))
 	opts := make([]slack.MsgOption, 0)
 	if content.IconEmoji != "" {
 		opts = append(opts, slack.MsgOptionIconEmoji(content.IconEmoji))
