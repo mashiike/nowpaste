@@ -208,18 +208,24 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 
 // https://docs.aws.amazon.com/sns/latest/dg/json-formats.html
 type HTTPNotification struct {
-	Type             string    `json:"Type"`
-	MessageId        string    `json:"MessageId"`
-	Token            string    `json:"Token,omitempty"` // Only for subscribe and unsubscribe
-	TopicArn         string    `json:"TopicArn"`
-	Subject          string    `json:"Subject,omitempty"` // Only for Notification
-	Message          string    `json:"Message"`
-	SubscribeURL     string    `json:"SubscribeURL,omitempty"` // Only for subscribe and unsubscribe
-	Timestamp        time.Time `json:"Timestamp"`
-	SignatureVersion string    `json:"SignatureVersion"`
-	Signature        string    `json:"Signature"`
-	SigningCertURL   string    `json:"SigningCertURL"`
-	UnsubscribeURL   string    `json:"UnsubscribeURL,omitempty"` // Only for notifications
+	Type              string                      `json:"Type"`
+	MessageId         string                      `json:"MessageId"`
+	Token             string                      `json:"Token,omitempty"` // Only for subscribe and unsubscribe
+	TopicArn          string                      `json:"TopicArn"`
+	Subject           string                      `json:"Subject,omitempty"` // Only for Notification
+	Message           string                      `json:"Message"`
+	SubscribeURL      string                      `json:"SubscribeURL,omitempty"` // Only for subscribe and unsubscribe
+	Timestamp         time.Time                   `json:"Timestamp"`
+	SignatureVersion  string                      `json:"SignatureVersion"`
+	Signature         string                      `json:"Signature"`
+	SigningCertURL    string                      `json:"SigningCertURL"`
+	UnsubscribeURL    string                      `json:"UnsubscribeURL,omitempty"` // Only for notifications
+	MessageAttributes map[string]MessageAttribute `json:"MessageAttributes,omitempty"`
+}
+
+type MessageAttribute struct {
+	Type  string `json:"Type"`
+	Value string `json:"Value"`
 }
 
 func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
@@ -229,6 +235,10 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	decoder := json.NewDecoder(io.TeeReader(req.Body, &buf))
 	if err := decoder.Decode(&n); err != nil || n.Type == "" {
 		n.Message = buf.String()
+		log.Println("[info] maybe raw message derived from SNS")
+		n.MessageId = req.Header.Get("X-Amz-Sns-Message-Id")
+		n.Type = req.Header.Get("X-Amz-Sns-Message-Type")
+		n.TopicArn = req.Header.Get("X-Amz-Sns-Topic-Arn")
 	}
 	log.Println("[info] sns", n.Type, n.TopicArn, n.Subject)
 	vars := mux.Vars(req)
@@ -238,6 +248,32 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	content := nwp.newContent(req)
+	if n.MessageAttributes != nil {
+		for k, v := range n.MessageAttributes {
+			log.Println("[debug] message attribute", k, string(v.Value))
+			if v.Type != "String" {
+				continue
+			}
+			switch k {
+			case "as_file":
+				if b, err := strconv.ParseBool(string(v.Value)); err == nil {
+					content.AsFile = b
+				}
+			case "as_message":
+				if b, err := strconv.ParseBool(string(v.Value)); err == nil {
+					content.AsMessage = b
+				}
+			case "filename":
+				content.Filename = string(v.Value)
+			case "icon_emoji":
+				content.IconEmoji = string(v.Value)
+			case "icon_url":
+				content.IconURL = string(v.Value)
+			case "username":
+				content.Username = string(v.Value)
+			}
+		}
+	}
 	switch n.Type {
 	case "SubscriptionConfirmation":
 		arnObj, err := arn.Parse(n.TopicArn)
@@ -268,7 +304,6 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		content.CodeBlockText = true
 		content.Text = out.String()
 	case "Notification":
-		log.Printf("[notice] %s from %s, subject=%s", n.Type, n.TopicArn, n.Subject)
 		decoder := json.NewDecoder(strings.NewReader(n.Message))
 		if err := decoder.Decode(&content); err != nil {
 			content.Text = strings.Trim(string(n.Message), "\"")
@@ -325,6 +360,7 @@ type Content struct {
 	Attachments   []slack.Attachment `json:"attachments,omitempty"`
 	AsFile        bool               `json:"as_file,omitempty"`
 	AsMessage     bool               `json:"as_message,omitempty"`
+	Filename      string             `json:"filename,omitempty"`
 }
 
 func (content *Content) IsRich() bool {
@@ -414,6 +450,7 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 }
 
 func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
+	log.Println("[debug] try post as file to ", content.Channel, "text size:", len(content.Text))
 	var f *slack.File
 	err, timeout := apiRetrier.Do(ctx, func() error {
 		var err error
@@ -462,6 +499,7 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 }
 
 func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
+	log.Println("[debug] try post as message to ", content.Channel, "text size:", len(content.Text))
 	opts := make([]slack.MsgOption, 0)
 	if content.IconEmoji != "" {
 		opts = append(opts, slack.MsgOptionIconEmoji(content.IconEmoji))
