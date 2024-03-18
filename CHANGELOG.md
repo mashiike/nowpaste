@@ -1,5 +1,7 @@
 # Changelog
 
+## [v0.5.1](https://github.com/mashiike/nowpaste/compare/v0.5.0...v0.5.1) - 2024-03-18
+
 ## [v0.5.0](https://github.com/mashiike/nowpaste/compare/v0.4.0...v0.5.0) - 2024-03-18
 - Bump github.com/fatih/color from 1.14.1 to 1.15.0 by @dependabot in https://github.com/mashiike/nowpaste/pull/68
 - Bump github.com/aws/aws-sdk-go-v2/config from 1.17.4 to 1.18.16 by @dependabot in https://github.com/mashiike/nowpaste/pull/67
