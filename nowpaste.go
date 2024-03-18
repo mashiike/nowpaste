@@ -74,9 +74,30 @@ func (nwp *NowPaste) CheckBasicAuth(req *http.Request) bool {
 	return clientID == *nwp.basicUser && clientSecret == *nwp.basicPass
 }
 
+func (nwp *NowPaste) newContent(req *http.Request) *Content {
+	content := &Content{}
+	if asFile := req.URL.Query().Get("as_file"); asFile != "" {
+		b, err := strconv.ParseBool(asFile)
+		if err == nil {
+			content.AsFile = b
+		} else {
+			log.Printf("[warn] as_file query param parse failed: %s", err.Error())
+		}
+	}
+	if asMessage := req.URL.Query().Get("as_message"); asMessage != "" {
+		b, err := strconv.ParseBool(asMessage)
+		if err == nil {
+			content.AsMessage = b
+		} else {
+			log.Printf("[warn] as_message query param parse failed: %s", err.Error())
+		}
+	}
+	return content
+}
+
 func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
-	var content *Content
+	content := nwp.newContent(req)
 	contentType := req.Header.Get("Content-Type")
 	log.Printf("[debug] Content-Type: %s", contentType)
 	switch strings.ToLower(contentType) {
@@ -99,7 +120,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 				codeBlockText = b
 			}
 		}
-		content = &Content{
+		content.Merge(&Content{
 			Channel:       req.FormValue("channel"),
 			Text:          req.FormValue("text"),
 			Username:      username,
@@ -107,9 +128,8 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			IconURL:       req.FormValue("icon_url"),
 			EscapeText:    escapeText,
 			CodeBlockText: codeBlockText,
-		}
+		})
 	case "application/json":
-		content = &Content{}
 		var buf bytes.Buffer
 		decoder := json.NewDecoder(io.TeeReader(req.Body, &buf))
 		if err := decoder.Decode(content); err != nil {
@@ -160,7 +180,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		content = &Content{
+		content.Merge(&Content{
 			Channel:       channel,
 			Text:          string(bs),
 			Username:      username,
@@ -168,7 +188,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			CodeBlockText: codeBlockText,
 			IconEmoji:     req.URL.Query().Get("icon_emoji"),
 			IconURL:       req.URL.Query().Get("icon_url"),
-		}
+		})
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
 		var rle *slack.RateLimitedError
@@ -217,7 +237,7 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	content := &Content{}
+	content := nwp.newContent(req)
 	switch n.Type {
 	case "SubscriptionConfirmation":
 		arnObj, err := arn.Parse(n.TopicArn)
@@ -303,32 +323,129 @@ type Content struct {
 	EscapeText    bool               `json:"escape_text,omitempty"`
 	CodeBlockText bool               `json:"code_block_text,omitempty"`
 	Attachments   []slack.Attachment `json:"attachments,omitempty"`
+	AsFile        bool               `json:"as_file,omitempty"`
+	AsMessage     bool               `json:"as_message,omitempty"`
 }
 
 func (content *Content) IsRich() bool {
 	return len(content.Blocks) > 0 || len(content.Attachments) > 0 || content.Text != ""
 }
 
-// see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
-const uploadFilesThreshold = 4000
-const linesThreshold = 6
+func (content *Content) Merge(c *Content) {
+	if c.Channel != "" {
+		content.Channel = c.Channel
+	}
+	if c.IconEmoji != "" {
+		content.IconEmoji = c.IconEmoji
+	}
+	if c.IconURL != "" {
+		content.IconURL = c.IconURL
+	}
+	if c.Username != "" {
+		content.Username = c.Username
+	}
+	if len(c.Blocks) > 0 {
+		content.Blocks = c.Blocks
+	}
+	if c.Text != "" {
+		content.Text = c.Text
+	}
+	if c.EscapeText {
+		content.EscapeText = c.EscapeText
+	}
+	if c.CodeBlockText {
+		content.CodeBlockText = c.CodeBlockText
+	}
+	if len(c.Attachments) > 0 {
+		content.Attachments = c.Attachments
+	}
+	if c.AsFile {
+		content.AsFile = c.AsFile
+	}
+	if c.AsMessage {
+		content.AsMessage = c.AsMessage
+	}
+}
 
 var apiRetrier = &retrier{
 	timeout: 10 * time.Second,
 	jitter:  500 * time.Millisecond,
 }
 
-func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
-	if content.Channel == "" {
-		return errors.New("channel is required")
+// see also https://api.slack.com/methods/chat.postMessage#:~:text=For%20best%20results%2C%20limit%20the,consider%20uploading%20a%20snippet%20instead.
+const uploadFilesThreshold = 4000
+const textMaxLength = 40000
+const linesThreshold = 6
+
+const postAsMessage = "message"
+const postAsFile = "file"
+
+func (nwp *NowPaste) detectPostMode(content *Content) string {
+	if content.AsMessage {
+		return postAsMessage
+	}
+	if content.AsFile {
+		return postAsFile
 	}
 	textSize := len(content.Text)
 	textLines := strings.Count(content.Text, "\n") + 1
 	log.Printf("[debug] content.Text: textSize=%d textLines=%d", textSize, textLines)
-	if textSize >= uploadFilesThreshold || (textLines >= linesThreshold && !content.CodeBlockText) {
-		log.Printf("[info] text over %d characters or over %d lines, try upload file to %s", uploadFilesThreshold, textLines, content.Channel)
-		var f *slack.File
-		err, timeout := apiRetrier.Do(ctx, func() error {
+	if textSize >= uploadFilesThreshold {
+		return postAsFile
+	}
+	if textLines >= linesThreshold && !content.CodeBlockText {
+		return postAsFile
+	}
+	return postAsMessage
+}
+
+func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
+	if content.Channel == "" {
+		return errors.New("channel is required")
+	}
+	switch nwp.detectPostMode(content) {
+	case postAsFile:
+		return nwp.postFile(ctx, content)
+	case postAsMessage:
+		return nwp.postMessage(ctx, content)
+	default:
+		return errors.New("unknown post mode")
+	}
+}
+
+func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
+	var f *slack.File
+	err, timeout := apiRetrier.Do(ctx, func() error {
+		var err error
+		f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
+			Channels: []string{content.Channel},
+			Content:  content.Text,
+		})
+		return err
+	})
+	if err != nil {
+		if timeout {
+			return err
+		}
+		var ser slack.SlackErrorResponse
+		if !errors.As(err, &ser) {
+			return fmt.Errorf("upload files: %w", err)
+		}
+		if ser.Err != "not_in_channel" {
+			log.Printf("[debug] try upload files, slack error response: %s", ser.Error())
+			return fmt.Errorf("upload files: %w", ser)
+		}
+
+		log.Printf("[warn] try upload files but not in channel, try join channel to %s", content.Channel)
+		err, _ = apiRetrier.Do(ctx, func() error {
+			_, _, _, err := nwp.client.JoinConversationContext(ctx, content.Channel)
+			return err
+		})
+		if err != nil {
+			log.Printf("[debug] join channel: %#v", err)
+			return fmt.Errorf("join channel may be not channel id: %w", err)
+		}
+		err, _ = apiRetrier.Do(ctx, func() error {
 			var err error
 			f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
 				Channels: []string{content.Channel},
@@ -337,42 +454,14 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 			return err
 		})
 		if err != nil {
-			if timeout {
-				return err
-			}
-			var ser slack.SlackErrorResponse
-			if !errors.As(err, &ser) {
-				return fmt.Errorf("upload files: %w", err)
-			}
-			if ser.Err != "not_in_channel" {
-				log.Printf("[debug] try upload files, slack error response: %s", ser.Error())
-				return fmt.Errorf("upload files: %w", ser)
-			}
-
-			log.Printf("[warn] try upload files but not in channel, try join channel to %s", content.Channel)
-			err, _ = apiRetrier.Do(ctx, func() error {
-				_, _, _, err := nwp.client.JoinConversationContext(ctx, content.Channel)
-				return err
-			})
-			if err != nil {
-				log.Printf("[debug] join channel: %#v", err)
-				return fmt.Errorf("join channel may be not channel id: %w", err)
-			}
-			err, _ = apiRetrier.Do(ctx, func() error {
-				var err error
-				f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
-					Channels: []string{content.Channel},
-					Content:  content.Text,
-				})
-				return err
-			})
-			if err != nil {
-				return fmt.Errorf("retry upload files: %w", err)
-			}
+			return fmt.Errorf("retry upload files: %w", err)
 		}
-		log.Printf("[info] upload File to %s, file id is `%s`", content.Channel, f.ID)
-		return nil
 	}
+	log.Printf("[info] upload File to %s, file id is `%s`", content.Channel, f.ID)
+	return nil
+}
+
+func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
 	opts := make([]slack.MsgOption, 0)
 	if content.IconEmoji != "" {
 		opts = append(opts, slack.MsgOptionIconEmoji(content.IconEmoji))
