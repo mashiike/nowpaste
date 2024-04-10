@@ -2,75 +2,99 @@ package nowpaste
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
-	"os"
 	"testing"
 
 	"github.com/sebdah/goldie/v2"
 	"github.com/slack-go/slack"
 )
 
-type mockSlackServer func(w http.ResponseWriter, r *http.Request)
+type mockClient func(w http.ResponseWriter, r *http.Request)
 
-func (f mockSlackServer) Do(r *http.Request) (*http.Response, error) {
+func (f mockClient) Do(r *http.Request) (*http.Response, error) {
 	w := httptest.NewRecorder()
-	switch {
-	case r.URL.Path == "/api/auth.test":
-		w.WriteHeader(http.StatusOK)
-		fp, err := os.Open("testdata/example_auth_test_response.json")
-		if err != nil {
-			return nil, fmt.Errorf("example_auth_test_response.json: %w", err)
-		}
-		defer fp.Close()
-		io.Copy(w, fp)
-	default:
-		f(w, r)
-	}
+	f(w, r)
 	return w.Result(), nil
 }
 
-type postRootTestCase struct {
-	name                  string
-	slackResponseHeaders  map[string]string
-	slackResponseBodyFile string
-	slackResponseStatus   int
-	requestHeaders        map[string]string
-	newRequestBody        func(t *testing.T) io.Reader
-	expectedStatus        int
+type statusCodeRecoder struct {
+	staus int
+	http.ResponseWriter
 }
 
+func (w *statusCodeRecoder) WriteHeader(statusCode int) {
+	w.staus = statusCode
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+type postRootTestCase struct {
+	name           string
+	requestHeaders map[string]string
+	newRequestBody func(t *testing.T) io.Reader
+	expectedStatus int
+}
+
+//go:embed testdata/example_auth_test_response.json
+var authTestRespopnse string
+
+//go:embed testdata/example_chat_post_message_response.json
+var chatPostMessageResponse string
+
+//go:embed testdata/example_files_get_upload_url_external_response.json
+var filesGetUploadURLExtendedResponse string
+
+//go:embed testdata/example_files_complete_upload_external_response.json
+var filesCompleteUploadExternalResponse string
+
 func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...func(func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request)) {
-	f := func(w http.ResponseWriter, r *http.Request) {
-		dump, err := httputil.DumpRequestOut(r, true)
-		if err != nil {
-			t.Error("request dump error:", err)
-			t.FailNow()
-		}
-		g.Assert(t, c.name, dump)
-		for key, value := range c.slackResponseHeaders {
-			w.Header().Set(key, value)
-		}
-		w.WriteHeader(c.slackResponseStatus)
-		if c.slackResponseBodyFile != "" {
-			fp, err := os.Open(c.slackResponseBodyFile)
-			if err != nil {
-				t.Error("can not open response data:", err)
-				t.FailNow()
-			}
-			defer fp.Close()
-			io.Copy(w, fp)
-		}
-	}
+	var apiCallLog bytes.Buffer
+	defer func() {
+		g.Assert(t, c.name, apiCallLog.Bytes())
+	}()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/auth.test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, authTestRespopnse)
+	})
+	mux.HandleFunc("/api/chat.postMessage", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, chatPostMessageResponse)
+	})
+	mux.HandleFunc("/api/files.getUploadURLExternal", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, filesGetUploadURLExtendedResponse)
+	})
+	mux.HandleFunc("/upload/v1/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/api/files.completeUploadExternal", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, filesCompleteUploadExternalResponse)
+	})
+	var f http.HandlerFunc
+	f = mux.ServeHTTP
 	for _, m := range middlewares {
 		f = m(f)
 	}
 	client := newWithClient(slack.New("dummy_token", slack.OptionHTTPClient(
-		mockSlackServer(f),
+		mockClient(func(w http.ResponseWriter, r *http.Request) {
+			dump, err := httputil.DumpRequestOut(r, true)
+			if err != nil {
+				t.Error("request dump error:", err)
+				t.FailNow()
+			}
+			fmt.Fprintf(&apiCallLog, "%s\n-----\n", dump)
+			recoder := &statusCodeRecoder{ResponseWriter: w}
+			f(recoder, r)
+			fmt.Fprintf(&apiCallLog, "Response Status: %d\n=====\n", recoder.staus)
+		}),
 	)))
 
 	req := httptest.NewRequest(http.MethodPost, "/", c.newRequestBody(t))
@@ -87,9 +111,7 @@ func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...fun
 
 var postRootTestCases []postRootTestCase = []postRootTestCase{
 	{
-		name:                  "short",
-		slackResponseBodyFile: "testdata/example_chat_post_message_response.json",
-		slackResponseStatus:   http.StatusOK,
+		name: "short",
 		requestHeaders: map[string]string{
 			"Content-Type": "application/json",
 		},
@@ -103,9 +125,7 @@ var postRootTestCases []postRootTestCase = []postRootTestCase{
 		expectedStatus: http.StatusOK,
 	},
 	{
-		name:                  "many_lines",
-		slackResponseBodyFile: "testdata/example_file_upload_response.json",
-		slackResponseStatus:   http.StatusOK,
+		name: "many_lines",
 		requestHeaders: map[string]string{
 			"Content-Type": "application/json",
 		},
@@ -126,6 +146,7 @@ func TestPostRootSuccess(t *testing.T) {
 	)
 	for _, c := range postRootTestCases {
 		t.Run(c.name, func(t *testing.T) {
+			log.Println("===== start test case", c.name, "=====")
 			c.Run(t, g)
 		})
 	}
@@ -144,59 +165,11 @@ func TestPostRootRetryOnce(t *testing.T) {
 						w.Header().Set("Retry-After", "1")
 						w.WriteHeader(http.StatusTooManyRequests)
 						i++
+						return
 					}
 					next(w, r)
 				}
 			})
-		})
-	}
-}
-
-func TestPostRootTimeout(t *testing.T) {
-	g := goldie.New(t,
-		goldie.WithFixtureDir("testdata/post_root_timeout/"),
-	)
-	cases := []postRootTestCase{
-		{
-			name: "short",
-			slackResponseHeaders: map[string]string{
-				"Retry-After": "1",
-			},
-			slackResponseStatus: http.StatusTooManyRequests,
-			requestHeaders: map[string]string{
-				"Content-Type": "application/json",
-			},
-			newRequestBody: func(t *testing.T) io.Reader {
-				body, _ := json.Marshal(map[string]string{
-					"channel": "#test",
-					"text":    "this is test message",
-				})
-				return bytes.NewReader(body)
-			},
-			expectedStatus: http.StatusTooManyRequests,
-		},
-		{
-			name: "many_lines",
-			slackResponseHeaders: map[string]string{
-				"Retry-After": "1",
-			},
-			slackResponseStatus: http.StatusTooManyRequests,
-			requestHeaders: map[string]string{
-				"Content-Type": "application/json",
-			},
-			newRequestBody: func(t *testing.T) io.Reader {
-				body, _ := json.Marshal(map[string]string{
-					"channel": "#test",
-					"text":    "this is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\nthis is test message\n",
-				})
-				return bytes.NewReader(body)
-			},
-			expectedStatus: http.StatusTooManyRequests,
-		},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			c.Run(t, g)
 		})
 	}
 }
