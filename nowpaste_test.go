@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
+	"strings"
 	"testing"
 
 	"github.com/sebdah/goldie/v2"
@@ -90,10 +91,20 @@ func (c postRootTestCase) Run(t *testing.T, g *goldie.Goldie, middlewares ...fun
 				t.Error("request dump error:", err)
 				t.FailNow()
 			}
-			fmt.Fprintf(&apiCallLog, "%s\n-----\n", dump)
+			contentType := r.Header.Get("Content-Type")
+			if strings.HasPrefix(contentType, "multipart/form-data") {
+				parts := strings.Split(contentType, ";")
+				for _, part := range parts {
+					if strings.HasPrefix(part, " boundary=") {
+						boundary := strings.Trim(part[len(" boundary="):], " ")
+						dump = bytes.ReplaceAll(dump, []byte(boundary), []byte("000000000000000000000000000000000000000000000000000000000000"))
+					}
+				}
+			}
+			fmt.Fprintf(&apiCallLog, "--- request --\n%s\n", dump)
 			recoder := &statusCodeRecoder{ResponseWriter: w}
 			f(recoder, r)
-			fmt.Fprintf(&apiCallLog, "Response Status: %d\n=====\n", recoder.staus)
+			fmt.Fprintf(&apiCallLog, "--- response status ---\n%d %s\n=====================\n", recoder.staus, http.StatusText(recoder.staus))
 		}),
 	)))
 
