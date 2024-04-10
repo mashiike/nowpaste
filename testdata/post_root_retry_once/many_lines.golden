@@ -23,11 +23,28 @@ Response Status: 200
 POST /upload/v1/ABC123... HTTP/1.1
 Host: files.slack.com
 User-Agent: Go-http-client/1.1
-Content-Length: 164
-Content-Type: application/x-www-form-urlencoded
+Transfer-Encoding: chunked
+Authorization: Bearer dummy_token
+Content-Type: multipart/form-data; boundary=bfb0d0b1fb5c1f8a7db96aca9281e77ca69d693febf72f0e59b12cfa0afd
 Accept-Encoding: gzip
 
-content=this+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0Athis+is+test+message%0A&token=dummy_token
+16e
+--bfb0d0b1fb5c1f8a7db96aca9281e77ca69d693febf72f0e59b12cfa0afd
+Content-Disposition: form-data; name="file"; filename="nowpaste"
+Content-Type: application/octet-stream
+
+this is test message
+this is test message
+this is test message
+this is test message
+this is test message
+this is test message
+
+--bfb0d0b1fb5c1f8a7db96aca9281e77ca69d693febf72f0e59b12cfa0afd--
+
+0
+
+
 -----
 Response Status: 200
 =====

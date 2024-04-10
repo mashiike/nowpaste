@@ -459,7 +459,7 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 		var err error
 		f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
 			Channel:  content.Channel,
-			Content:  content.Text,
+			Reader:   strings.NewReader(content.Text),
 			Filename: content.Filename,
 			FileSize: len(content.Text),
 		})
@@ -491,7 +491,7 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 			var err error
 			f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
 				Channel:  content.Channel,
-				Content:  content.Text,
+				Reader:   strings.NewReader(content.Text),
 				Filename: content.Filename,
 				FileSize: len(content.Text),
 			})
