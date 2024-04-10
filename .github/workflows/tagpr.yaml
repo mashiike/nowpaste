@@ -1,37 +1,33 @@
-# .github/workflows/tagpr.yml
 name: tagpr
 on:
   push:
     branches: ["main"]
+
 jobs:
-  deploy:
+  tagpr:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: Songmu/tagpr@main
-      - name: Checkout main
-        uses: actions/checkout@v3
-        with:
-          ref: main
-      - name: check released version
-        id: version_check
-        continue-on-error: true
-        run: |
-          version=$(git describe --tags)
-          echo ::set-output name=version::$version
-      - name: Adding summary
-        run: echo '### ${{steps.version_check.outputs.version}}' >> $GITHUB_STEP_SUMMARY
-        if: ${{ steps.version_check.outcome == 'success' }}
+      - uses: actions/checkout@v4
+      - id: tagpr
+        uses: Songmu/tagpr@v1
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.20"
-        if: ${{ steps.version_check.outcome == 'success' }}
+            go-version: "1.20"
+      - uses: mashiike/action-gocredits@v0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+        if: "steps.tagpr.outputs.tag == ''"
+      - name: Checkout
+        uses: actions/checkout@v4
+        if: ${{ steps.tagpr.outputs.tag != '' }}
+        with:
+          ref: ${{ steps.tagpr.outputs.tag }}
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v1
+        uses: goreleaser/goreleaser-action@v5
         with:
           version: latest
           args: release
-        if: ${{ steps.version_check.outcome == 'success' }}
+        if: ${{ steps.tagpr.outputs.tag != '' }}
