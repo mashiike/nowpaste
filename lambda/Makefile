@@ -50,3 +50,6 @@ clean:
 
 send/%:
 	cat sample.txt | curl -d @- -H "Content-Type: text/plain" $(shell tfstate-lookup --state .terraform/terraform.tfstate aws_lambda_function_url.nowpaste.function_url)?code_block_text=true\&channel=$*
+
+send_as_file/%:
+	cat sample.txt | curl -d @- -H "Content-Type: text/plain" $(shell tfstate-lookup --state .terraform/terraform.tfstate aws_lambda_function_url.nowpaste.function_url)?as_file=true\&channel=$*

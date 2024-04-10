@@ -451,12 +451,17 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 
 func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 	log.Println("[debug] try post as file to ", content.Channel, "text size:", len(content.Text))
-	var f *slack.File
+	if content.Filename == "" {
+		content.Filename = "nowpaste"
+	}
+	var f *slack.FileSummary
 	err, timeout := apiRetrier.Do(ctx, func() error {
 		var err error
-		f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
-			Channels: []string{content.Channel},
-			Content:  content.Text,
+		f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+			Channel:  content.Channel,
+			Reader:   strings.NewReader(content.Text),
+			Filename: content.Filename,
+			FileSize: len(content.Text),
 		})
 		return err
 	})
@@ -484,9 +489,11 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 		}
 		err, _ = apiRetrier.Do(ctx, func() error {
 			var err error
-			f, err = nwp.client.UploadFileContext(ctx, slack.FileUploadParameters{
-				Channels: []string{content.Channel},
-				Content:  content.Text,
+			f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
+				Channel:  content.Channel,
+				Reader:   strings.NewReader(content.Text),
+				Filename: content.Filename,
+				FileSize: len(content.Text),
 			})
 			return err
 		})
