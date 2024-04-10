@@ -7,7 +7,7 @@ Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
 filename=nowpaste&length=126&token=dummy_token
---- response Status ---
+--- response status ---
 200 OK
 =====================
 --- request --
@@ -36,7 +36,7 @@ this is test message
 0
 
 
---- response Status ---
+--- response status ---
 200 OK
 =====================
 --- request --
@@ -48,6 +48,6 @@ Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
 channel_id=%23test&files=%5B%7B%22id%22%3A%22F123ABC456%22%2C%22title%22%3A%22%22%7D%5D&token=dummy_token
---- response Status ---
+--- response status ---
 200 OK
 =====================

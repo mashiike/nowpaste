@@ -7,7 +7,7 @@ Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
 channel=%23test&text=this+is+test+message&token=dummy_token
---- response Status ---
+--- response status ---
 429 Too Many Requests
 =====================
 --- request --
@@ -19,6 +19,6 @@ Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
 channel=%23test&text=this+is+test+message&token=dummy_token
---- response Status ---
+--- response status ---
 200 OK
 =====================
