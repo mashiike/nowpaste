@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.6.0](https://github.com/mashiike/nowpaste/compare/v0.5.0...v0.6.0) - 2024-04-10
+- add credits generation for tagpr workflow by @mashiike in https://github.com/mashiike/nowpaste/pull/83
+- grouping dependency update for aws-sdk-go-v2 by @mashiike in https://github.com/mashiike/nowpaste/pull/84
+- update to Go 1.22 by @mashiike in https://github.com/mashiike/nowpaste/pull/89
+- add dependabot config for Github Actions by @mashiike in https://github.com/mashiike/nowpaste/pull/88
+- Bump github.com/fujiwara/ridge from 0.6.1 to 0.9.0 by @dependabot in https://github.com/mashiike/nowpaste/pull/87
+- add review dog by @mashiike in https://github.com/mashiike/nowpaste/pull/90
+- Bump github.com/fatih/color from 1.15.0 to 1.16.0 by @dependabot in https://github.com/mashiike/nowpaste/pull/86
+- files.upload is deprecated , switch to UploadFileV2Context() by @mashiike in https://github.com/mashiike/nowpaste/pull/91
+
 ## [v0.5.0](https://github.com/mashiike/nowpaste/compare/v0.4.0...v0.5.0) - 2024-03-18
 - Bump github.com/fatih/color from 1.14.1 to 1.15.0 by @dependabot in https://github.com/mashiike/nowpaste/pull/68
 - Bump github.com/aws/aws-sdk-go-v2/config from 1.17.4 to 1.18.16 by @dependabot in https://github.com/mashiike/nowpaste/pull/67
