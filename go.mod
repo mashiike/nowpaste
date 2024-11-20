@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.28.5
 	github.com/aws/aws-sdk-go-v2/service/sns v1.33.5
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.55.6
-	github.com/fatih/color v1.16.0
+	github.com/fatih/color v1.18.0
 	github.com/fujiwara/logutils v1.1.2
 	github.com/fujiwara/ridge v0.9.0
 	github.com/gorilla/mux v1.8.1
