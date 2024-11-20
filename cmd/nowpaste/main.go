@@ -38,12 +38,13 @@ func main() {
 	}
 	log.SetOutput(filter)
 	var (
-		minLevel   string
-		pathPrefix string
-		listen     string
-		token      string
-		basicUser  string
-		basicPass  string
+		minLevel           string
+		pathPrefix         string
+		listen             string
+		token              string
+		basicUser          string
+		basicPass          string
+		searchChannelTypes string
 	)
 	flag.CommandLine.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "nowpaste [options]")
@@ -56,6 +57,7 @@ func main() {
 	flag.StringVar(&token, "slack-token", "", "slack token")
 	flag.StringVar(&basicUser, "basic-user", "", "basic auth user")
 	flag.StringVar(&basicPass, "basic-pass", "", "basic auth pass")
+	flag.StringVar(&searchChannelTypes, "search-channel-types", "", "search channel types. comma separated enums (public_channel,private_channel,mpim,im)")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if ssmPath := os.Getenv("NOWPASTE_SSM_PATH"); ssmPath != "" {
@@ -74,6 +76,9 @@ func main() {
 	app := nowpaste.New(token)
 	if basicUser != "" && basicPass != "" {
 		app.SetBasicAuth(basicUser, basicPass)
+	}
+	if searchChannelTypes != "" {
+		app.SetSearchChannelTypes(strings.Split(searchChannelTypes, ","))
 	}
 	ridge.RunWithContext(ctx, listen, pathPrefix, app)
 }
@@ -136,21 +141,17 @@ func newSSMClient(ctx context.Context) (*ssm.Client, error) {
 	if region := os.Getenv("AWS_DEFAULT_REGION"); region != "" {
 		opts = append(opts, config.WithRegion(region))
 	}
-	if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
-		opts = append(opts, config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{
-					URL:           endpoint,
-					SigningRegion: region,
-				}, nil
-			},
-		)))
-	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
-	client := ssm.NewFromConfig(awsCfg)
+	var ssmOpts []func(*ssm.Options)
+	if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
+		ssmOpts = append(ssmOpts, func(o *ssm.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+		})
+	}
+	client := ssm.NewFromConfig(awsCfg, ssmOpts...)
 	return client, nil
 }
 
