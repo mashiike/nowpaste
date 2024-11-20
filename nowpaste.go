@@ -543,7 +543,7 @@ func (nwp *NowPaste) searchChannel(ctx context.Context, channelName string) (cha
 			channels, nextCursor, err = nwp.client.GetConversationsContext(ctx, &slack.GetConversationsParameters{
 				Limit:  1000,
 				Cursor: cursor,
-				Types:  []string{"public_channel"},
+				Types:  nwp.serachChannelTypes,
 			})
 			return err
 		})

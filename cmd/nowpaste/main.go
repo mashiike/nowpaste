@@ -141,21 +141,17 @@ func newSSMClient(ctx context.Context) (*ssm.Client, error) {
 	if region := os.Getenv("AWS_DEFAULT_REGION"); region != "" {
 		opts = append(opts, config.WithRegion(region))
 	}
-	if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
-		opts = append(opts, config.WithEndpointResolverWithOptions(aws.EndpointResolverWithOptionsFunc(
-			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{
-					URL:           endpoint,
-					SigningRegion: region,
-				}, nil
-			},
-		)))
-	}
 	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
 		return nil, err
 	}
-	client := ssm.NewFromConfig(awsCfg)
+	var ssmOpts []func(*ssm.Options)
+	if endpoint := os.Getenv("AWS_ENDPOINT"); endpoint != "" {
+		ssmOpts = append(ssmOpts, func(o *ssm.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+		})
+	}
+	client := ssm.NewFromConfig(awsCfg, ssmOpts...)
 	return client, nil
 }
 
