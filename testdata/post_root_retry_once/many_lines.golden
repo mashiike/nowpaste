@@ -31,7 +31,7 @@ Authorization: Bearer dummy_token
 Content-Type: multipart/form-data; boundary=000000000000000000000000000000000000000000000000000000000000
 Accept-Encoding: gzip
 
-16e
+1b2
 --000000000000000000000000000000000000000000000000000000000000
 Content-Disposition: form-data; name="file"; filename="nowpaste"
 Content-Type: application/octet-stream
@@ -42,6 +42,8 @@ this is test message
 this is test message
 this is test message
 this is test message
+
+--000000000000000000000000000000000000000000000000000000000000--
 
 --000000000000000000000000000000000000000000000000000000000000--
 
