@@ -30,7 +30,7 @@ func NewInmemoryChannelCache() *InmemoryChannelCache {
 	}
 }
 
-func (c *InmemoryChannelCache) Get(ctx context.Context, channelName string) (channelID string, ok bool, err error) {
+func (c *InmemoryChannelCache) Get(_ context.Context, channelName string) (channelID string, ok bool, err error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	entry, ok := c.cache[channelName]
@@ -44,7 +44,7 @@ func (c *InmemoryChannelCache) Get(ctx context.Context, channelName string) (cha
 	return entry.ChannelID, true, nil
 }
 
-func (c *InmemoryChannelCache) SetMulti(ctx context.Context, entries []ChannelCacheEntry) error {
+func (c *InmemoryChannelCache) SetMulti(_ context.Context, entries []ChannelCacheEntry) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, entry := range entries {
