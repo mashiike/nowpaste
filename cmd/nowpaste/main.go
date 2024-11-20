@@ -38,12 +38,13 @@ func main() {
 	}
 	log.SetOutput(filter)
 	var (
-		minLevel   string
-		pathPrefix string
-		listen     string
-		token      string
-		basicUser  string
-		basicPass  string
+		minLevel           string
+		pathPrefix         string
+		listen             string
+		token              string
+		basicUser          string
+		basicPass          string
+		searchChannelTypes string
 	)
 	flag.CommandLine.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "nowpaste [options]")
@@ -56,6 +57,7 @@ func main() {
 	flag.StringVar(&token, "slack-token", "", "slack token")
 	flag.StringVar(&basicUser, "basic-user", "", "basic auth user")
 	flag.StringVar(&basicPass, "basic-pass", "", "basic auth pass")
+	flag.StringVar(&searchChannelTypes, "search-channel-types", "", "search channel types. comma separated enums (public_channel,private_channel,mpim,im)")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if ssmPath := os.Getenv("NOWPASTE_SSM_PATH"); ssmPath != "" {
@@ -74,6 +76,9 @@ func main() {
 	app := nowpaste.New(token)
 	if basicUser != "" && basicPass != "" {
 		app.SetBasicAuth(basicUser, basicPass)
+	}
+	if searchChannelTypes != "" {
+		app.SetSearchChannelTypes(strings.Split(searchChannelTypes, ","))
 	}
 	ridge.RunWithContext(ctx, listen, pathPrefix, app)
 }

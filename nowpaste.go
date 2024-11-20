@@ -25,10 +25,12 @@ import (
 )
 
 type NowPaste struct {
-	router    *mux.Router
-	client    *slack.Client
-	basicUser *string
-	basicPass *string
+	router             *mux.Router
+	client             *slack.Client
+	basicUser          *string
+	basicPass          *string
+	cache              ChannelCache
+	serachChannelTypes []string
 }
 
 func New(slackToken string) *NowPaste {
@@ -37,11 +39,17 @@ func New(slackToken string) *NowPaste {
 
 func newWithClient(client *slack.Client) *NowPaste {
 	nwp := &NowPaste{
-		router: mux.NewRouter(),
-		client: client,
+		router:             mux.NewRouter(),
+		client:             client,
+		cache:              NewInmemoryChannelCache(),
+		serachChannelTypes: []string{"public_channel"},
 	}
 	nwp.setRoute()
 	return nwp
+}
+
+func (nwp *NowPaste) SetSearchChannelTypes(types []string) {
+	nwp.serachChannelTypes = types
 }
 
 func (nwp *NowPaste) SetBasicAuth(user string, pass string) {
@@ -454,40 +462,17 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 	if content.Filename == "" {
 		content.Filename = "nowpaste"
 	}
+	if channelID, ok, err := nwp.cache.Get(ctx, content.Channel); err == nil && ok {
+		content.Channel = channelID
+	}
 	var f *slack.FileSummary
-	err, timeout := apiRetrier.Do(ctx, func() error {
-		var err error
-		f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-			Channel:  content.Channel,
-			Reader:   strings.NewReader(content.Text),
-			Filename: content.Filename,
-			FileSize: len(content.Text),
-		})
-		return err
-	})
-	if err != nil {
-		if timeout {
-			return err
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
-		var ser slack.SlackErrorResponse
-		if !errors.As(err, &ser) {
-			return fmt.Errorf("upload files: %w", err)
-		}
-		if ser.Err != "not_in_channel" {
-			log.Printf("[debug] try upload files, slack error response: %s", ser.Error())
-			return fmt.Errorf("upload files: %w", ser)
-		}
-
-		log.Printf("[warn] try upload files but not in channel, try join channel to %s", content.Channel)
-		err, _ = apiRetrier.Do(ctx, func() error {
-			_, _, _, err := nwp.client.JoinConversationContext(ctx, content.Channel)
-			return err
-		})
-		if err != nil {
-			log.Printf("[debug] join channel: %#v", err)
-			return fmt.Errorf("join channel may be not channel id: %w", err)
-		}
-		err, _ = apiRetrier.Do(ctx, func() error {
+		err, timeout := apiRetrier.Do(ctx, func() error {
 			var err error
 			f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
 				Channel:  content.Channel,
@@ -497,12 +482,94 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 			})
 			return err
 		})
-		if err != nil {
-			return fmt.Errorf("retry upload files: %w", err)
+		if err == nil {
+			break
 		}
+		if timeout {
+			return err
+		}
+		var ser slack.SlackErrorResponse
+		if !errors.As(err, &ser) {
+			return fmt.Errorf("upload files: %w", err)
+		}
+		switch ser.Err {
+		case "not_in_channel":
+			log.Printf("[warn] try upload files but not in channel, try join channel to %s", content.Channel)
+			err, _ = apiRetrier.Do(ctx, func() error {
+				_, _, _, err := nwp.client.JoinConversationContext(ctx, content.Channel)
+				return err
+			})
+			if err != nil {
+				log.Printf("[debug] join channel: %#v", err)
+				return fmt.Errorf("join channel may be not channel id: %w", err)
+			}
+		case "channel_not_found":
+			log.Printf("[warn] try upload files but channel not found, try search channel to %s", content.Channel)
+			channelID, ok, err := nwp.searchChannel(ctx, content.Channel)
+			if err != nil {
+				return fmt.Errorf("search channel: %w", err)
+			}
+			if !ok {
+				return fmt.Errorf("channel not found: %s", content.Channel)
+			}
+			content.Channel = channelID
+		default:
+			log.Printf("[debug] try upload files, slack error response: %s", ser.Error())
+			return fmt.Errorf("upload files: %w", ser)
+		}
+		log.Println("[debug] retry upload files")
 	}
 	log.Printf("[info] upload File to %s, file id is `%s`", content.Channel, f.ID)
 	return nil
+}
+
+func (nwp *NowPaste) searchChannel(ctx context.Context, channelName string) (channelID string, ok bool, err error) {
+	log.Println("[info] try search channel to ", channelName)
+	if channelID, ok, err = nwp.cache.Get(ctx, channelName); err == nil && ok {
+		return channelID, true, nil
+	}
+	var cursor string
+	var isFirst = true
+	for isFirst || cursor != "" {
+		select {
+		case <-ctx.Done():
+			return "", false, ctx.Err()
+		default:
+		}
+		var channels []slack.Channel
+		var nextCursor string
+		err, _ = apiRetrier.Do(ctx, func() error {
+			var err error
+			channels, nextCursor, err = nwp.client.GetConversationsContext(ctx, &slack.GetConversationsParameters{
+				Limit:  1000,
+				Cursor: cursor,
+				Types:  []string{"public_channel"},
+			})
+			return err
+		})
+		if err != nil {
+			return "", false, fmt.Errorf("search channel: %w", err)
+		}
+		isFirst = false
+		var found bool
+		var channelID string
+		entries := make([]ChannelCacheEntry, 0, len(channels))
+		for _, c := range channels {
+			if c.Name == channelName {
+				found = true
+				channelID = c.ID
+			}
+			entries = append(entries, ChannelCacheEntry{ChannelName: c.Name, ChannelID: c.ID, TTL: time.Now().Add(24 * time.Hour)})
+		}
+		if err := nwp.cache.SetMulti(ctx, entries); err != nil {
+			log.Printf("[warn] cache set failed: %s", err.Error())
+		}
+		if found {
+			return channelID, true, nil
+		}
+		cursor = nextCursor
+	}
+	return "", false, nil
 }
 
 func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
@@ -548,8 +615,13 @@ func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
 	}
 	if postedChannelID == content.Channel {
 		log.Printf("[info] post Message to %s at %s", postedChannelID, postedTimestamp)
-	} else {
-		log.Printf("[info] post Message to %s(%s) at %s", content.Channel, postedChannelID, postedTimestamp)
+		return nil
+	}
+	log.Printf("[info] post Message to %s(%s) at %s", content.Channel, postedChannelID, postedTimestamp)
+	if err := nwp.cache.SetMulti(ctx, []ChannelCacheEntry{
+		{ChannelName: content.Channel, ChannelID: postedChannelID, TTL: time.Now().Add(24 * time.Hour)},
+	}); err != nil {
+		log.Printf("[warn] cache set failed: %s", err.Error())
 	}
 	return nil
 }

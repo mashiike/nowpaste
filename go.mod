@@ -5,6 +5,7 @@ go 1.21
 toolchain go1.23.3
 
 require (
+	github.com/Songmu/flextime v0.1.0
 	github.com/aws/aws-sdk-go-v2 v1.32.5
 	github.com/aws/aws-sdk-go-v2/config v1.27.7
 	github.com/aws/aws-sdk-go-v2/service/sns v1.33.5
