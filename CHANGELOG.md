@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.7.0](https://github.com/mashiike/nowpaste/compare/v0.6.0...v0.7.0) - 2024-11-20
+- Bump goreleaser/goreleaser-action from 5 to 6 by @dependabot in https://github.com/mashiike/nowpaste/pull/101
+- update go 1.23 and update modules by @mashiike in https://github.com/mashiike/nowpaste/pull/116
+- if hove scope channels:read, file upload with channel_name sucess by @mashiike in https://github.com/mashiike/nowpaste/pull/118
+- Bump the aws-sdk-go-v2 group across 1 directory with 2 updates by @dependabot in https://github.com/mashiike/nowpaste/pull/121
+
 ## [v0.6.0](https://github.com/mashiike/nowpaste/compare/v0.5.0...v0.6.0) - 2024-04-10
 - add credits generation for tagpr workflow by @mashiike in https://github.com/mashiike/nowpaste/pull/83
 - grouping dependency update for aws-sdk-go-v2 by @mashiike in https://github.com/mashiike/nowpaste/pull/84
