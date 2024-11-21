@@ -45,6 +45,7 @@ func main() {
 		basicUser          string
 		basicPass          string
 		searchChannelTypes string
+		jsonAutoFile       bool
 	)
 	flag.CommandLine.Usage = func() {
 		fmt.Fprintln(flag.CommandLine.Output(), "nowpaste [options]")
@@ -58,6 +59,7 @@ func main() {
 	flag.StringVar(&basicUser, "basic-user", "", "basic auth user")
 	flag.StringVar(&basicPass, "basic-pass", "", "basic auth pass")
 	flag.StringVar(&searchChannelTypes, "search-channel-types", "", "search channel types. comma separated enums (public_channel,private_channel,mpim,im)")
+	flag.BoolVar(&jsonAutoFile, "json-auto-file", false, "auto file upload for json content")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if ssmPath := os.Getenv("NOWPASTE_SSM_PATH"); ssmPath != "" {
@@ -79,6 +81,9 @@ func main() {
 	}
 	if searchChannelTypes != "" {
 		app.SetSearchChannelTypes(strings.Split(searchChannelTypes, ","))
+	}
+	if jsonAutoFile {
+		app.SetJSONAutoFile(true)
 	}
 	ridge.RunWithContext(ctx, listen, pathPrefix, app)
 }

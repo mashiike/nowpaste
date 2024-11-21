@@ -3,7 +3,8 @@
   "Environment": {
     "Variables": {
       "NOWPASTE_SSM_NAMES": "/nowpaste/SLACK_TOKEN",
-      "NOWPASTE_LOG_LEVEL": "debug"
+      "NOWPASTE_LOG_LEVEL": "debug",
+      "NOWPASTE_JSON_AUTO_FILE": "true"
     }
   },
   "FunctionName": "nowpaste",
