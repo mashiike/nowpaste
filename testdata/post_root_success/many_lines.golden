@@ -2,11 +2,11 @@
 POST /api/files.getUploadURLExternal HTTP/1.1
 Host: slack.com
 User-Agent: Go-http-client/1.1
-Content-Length: 46
+Content-Length: 49
 Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
-filename=nowpaste&length=126&token=dummy_token
+filename=message.txt&length=126&token=dummy_token
 --- response status ---
 200 OK
 =====================
@@ -19,9 +19,9 @@ Authorization: Bearer dummy_token
 Content-Type: multipart/form-data; boundary=000000000000000000000000000000000000000000000000000000000000
 Accept-Encoding: gzip
 
-1b2
+1b5
 --000000000000000000000000000000000000000000000000000000000000
-Content-Disposition: form-data; name="file"; filename="nowpaste"
+Content-Disposition: form-data; name="file"; filename="message.txt"
 Content-Type: application/octet-stream
 
 this is test message

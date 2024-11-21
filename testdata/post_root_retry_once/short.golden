@@ -2,11 +2,11 @@
 POST /api/chat.postMessage HTTP/1.1
 Host: slack.com
 User-Agent: Go-http-client/1.1
-Content-Length: 59
+Content-Length: 77
 Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
-channel=%23test&text=this+is+test+message&token=dummy_token
+channel=%23test&text=this+is+test+message&token=dummy_token&username=nowpaste
 --- response status ---
 429 Too Many Requests
 =====================
@@ -14,11 +14,11 @@ channel=%23test&text=this+is+test+message&token=dummy_token
 POST /api/chat.postMessage HTTP/1.1
 Host: slack.com
 User-Agent: Go-http-client/1.1
-Content-Length: 59
+Content-Length: 77
 Content-Type: application/x-www-form-urlencoded
 Accept-Encoding: gzip
 
-channel=%23test&text=this+is+test+message&token=dummy_token
+channel=%23test&text=this+is+test+message&token=dummy_token&username=nowpaste
 --- response status ---
 200 OK
 =====================

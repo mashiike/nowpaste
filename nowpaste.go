@@ -115,11 +115,6 @@ func (nwp *NowPaste) newContent(req *http.Request) *Content {
 func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	content := nwp.newContent(req)
-	channel := req.URL.Query().Get("channel")
-	if channel == "" {
-		http.Error(w, "query param `channel` is required", http.StatusBadRequest)
-		return
-	}
 	username := req.URL.Query().Get("username")
 	if username == "" {
 		username = "nowpaste"
@@ -139,7 +134,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	content.Merge(&Content{
-		Channel:       channel,
+		Channel:       req.URL.Query().Get("channel"),
 		Username:      username,
 		EscapeText:    escapeText,
 		CodeBlockText: codeBlockText,
@@ -210,6 +205,10 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 		content.Merge(&Content{
 			Text: string(bs),
 		})
+	}
+	if content.Channel == "" {
+		http.Error(w, "query param `channel` is required", http.StatusBadRequest)
+		return
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
 		var rle *slack.RateLimitedError
