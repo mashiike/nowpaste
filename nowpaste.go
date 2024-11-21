@@ -386,6 +386,7 @@ type Content struct {
 	AsMessage     bool               `json:"as_message,omitempty"`
 	Filename      string             `json:"filename,omitempty"`
 	Summary       string             `json:"summary,omitempty"`
+	isJSON        *bool
 }
 
 func (content *Content) IsRich() bool {
@@ -435,6 +436,9 @@ func (content *Content) Merge(c *Content) {
 }
 
 func (content *Content) IsJSON() bool {
+	if content.isJSON != nil {
+		return *content.isJSON
+	}
 	if len(content.Blocks) > 0 || len(content.Attachments) > 0 {
 		return false
 	}
@@ -450,6 +454,7 @@ func (content *Content) IsJSON() bool {
 			break
 		}
 	}
+	content.isJSON = &isJSON
 	return isJSON
 }
 
@@ -483,9 +488,6 @@ func (nwp *NowPaste) detectPostMode(content *Content) string {
 		return postAsFile
 	}
 	if nwp.jsonAutoFile && content.IsJSON() {
-		if content.Filename == "" {
-			content.Filename = "message.json"
-		}
 		return postAsFile
 	}
 	return postAsMessage
@@ -505,10 +507,35 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	}
 }
 
+// DetermineExtension determines the file extension from the content type.
+func DetermineExtension(content []byte) string {
+	mimeType := http.DetectContentType(content)
+	switch mimeType {
+	case "application/json":
+		return ".json"
+	case "application/xml", "text/xml":
+		return ".xml"
+	case "text/plain; charset=utf-8":
+		return ".txt"
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "application/pdf":
+		return ".pdf"
+	default:
+		return ""
+	}
+}
+
 func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 	log.Println("[debug] try post as file to ", content.Channel, "text size:", len(content.Text), "summary:", content.Summary)
 	if content.Filename == "" {
-		content.Filename = "nowpaste"
+		if content.IsJSON() {
+			content.Filename = "message.json"
+		} else {
+			content.Filename = "message" + DetermineExtension([]byte(content.Text))
+		}
 	}
 	if channelID, ok, err := nwp.cache.Get(ctx, content.Channel); err == nil && ok {
 		content.Channel = channelID
