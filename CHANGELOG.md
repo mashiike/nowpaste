@@ -1,5 +1,9 @@
 # Changelog
 
+## [v0.8.0](https://github.com/mashiike/nowpaste/compare/v0.7.0...v0.8.0) - 2024-11-21
+- json auto file mode by @mashiike in https://github.com/mashiike/nowpaste/pull/122
+- add summary parameter by @mashiike in https://github.com/mashiike/nowpaste/pull/124
+
 ## [v0.7.0](https://github.com/mashiike/nowpaste/compare/v0.6.0...v0.7.0) - 2024-11-20
 - Bump goreleaser/goreleaser-action from 5 to 6 by @dependabot in https://github.com/mashiike/nowpaste/pull/101
 - update go 1.23 and update modules by @mashiike in https://github.com/mashiike/nowpaste/pull/116
