@@ -30,6 +30,7 @@ type NowPaste struct {
 	basicUser          *string
 	basicPass          *string
 	cache              ChannelCache
+	jsonAutoFile       bool
 	serachChannelTypes []string
 }
 
@@ -55,6 +56,14 @@ func (nwp *NowPaste) SetSearchChannelTypes(types []string) {
 func (nwp *NowPaste) SetBasicAuth(user string, pass string) {
 	nwp.basicUser = &user
 	nwp.basicPass = &pass
+}
+
+func (nwp *NowPaste) SetCache(cache ChannelCache) {
+	nwp.cache = cache
+}
+
+func (nwp *NowPaste) SetJSONAutoFile(b bool) {
+	nwp.jsonAutoFile = b
 }
 
 func (nwp *NowPaste) setRoute() {
@@ -411,6 +420,25 @@ func (content *Content) Merge(c *Content) {
 	}
 }
 
+func (content *Content) IsJSON() bool {
+	if len(content.Blocks) > 0 || len(content.Attachments) > 0 {
+		return false
+	}
+	dec := json.NewDecoder(strings.NewReader(content.Text))
+	isJSON := true
+	for {
+		var v interface{}
+		if err := dec.Decode(&v); err != nil {
+			if err == io.EOF {
+				break
+			}
+			isJSON = false
+			break
+		}
+	}
+	return isJSON
+}
+
 var apiRetrier = &retrier{
 	timeout: 10 * time.Second,
 	jitter:  500 * time.Millisecond,
@@ -438,6 +466,9 @@ func (nwp *NowPaste) detectPostMode(content *Content) string {
 		return postAsFile
 	}
 	if textLines >= linesThreshold && !content.CodeBlockText {
+		return postAsFile
+	}
+	if nwp.jsonAutoFile && content.IsJSON() {
 		return postAsFile
 	}
 	return postAsMessage
