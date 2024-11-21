@@ -115,6 +115,33 @@ func (nwp *NowPaste) newContent(req *http.Request) *Content {
 func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	content := nwp.newContent(req)
+	username := req.URL.Query().Get("username")
+	if username == "" {
+		username = "nowpaste"
+	}
+	escapeTextStr := req.URL.Query().Get("escape_text")
+	var escapeText bool
+	if escapeTextStr != "" {
+		if b, err := strconv.ParseBool(escapeTextStr); err == nil {
+			escapeText = b
+		}
+	}
+	codeBlockTextStr := req.URL.Query().Get("code_block_text")
+	var codeBlockText bool
+	if codeBlockTextStr != "" {
+		if b, err := strconv.ParseBool(codeBlockTextStr); err == nil {
+			codeBlockText = b
+		}
+	}
+	content.Merge(&Content{
+		Channel:       req.URL.Query().Get("channel"),
+		Username:      username,
+		EscapeText:    escapeText,
+		CodeBlockText: codeBlockText,
+		IconEmoji:     req.URL.Query().Get("icon_emoji"),
+		IconURL:       req.URL.Query().Get("icon_url"),
+		Summary:       req.URL.Query().Get("summary"),
+	})
 	contentType := req.Header.Get("Content-Type")
 	log.Printf("[debug] Content-Type: %s", contentType)
 	switch strings.ToLower(contentType) {
@@ -145,6 +172,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			IconURL:       req.FormValue("icon_url"),
 			EscapeText:    escapeText,
 			CodeBlockText: codeBlockText,
+			Summary:       req.FormValue("summary"),
 		})
 	case "application/json":
 		var buf bytes.Buffer
@@ -168,29 +196,6 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	default:
-		channel := req.URL.Query().Get("channel")
-		if channel == "" {
-			http.Error(w, "query param `channel` is required", http.StatusBadRequest)
-			return
-		}
-		username := req.URL.Query().Get("username")
-		if username == "" {
-			username = "nowpaste"
-		}
-		escapeTextStr := req.URL.Query().Get("escape_text")
-		var escapeText bool
-		if escapeTextStr != "" {
-			if b, err := strconv.ParseBool(escapeTextStr); err == nil {
-				escapeText = b
-			}
-		}
-		codeBlockTextStr := req.URL.Query().Get("code_block_text")
-		var codeBlockText bool
-		if codeBlockTextStr != "" {
-			if b, err := strconv.ParseBool(codeBlockTextStr); err == nil {
-				codeBlockText = b
-			}
-		}
 		bs, err := io.ReadAll(req.Body)
 		if err != nil {
 			log.Printf("[info] can not read body: %s", err.Error())
@@ -198,14 +203,12 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		content.Merge(&Content{
-			Channel:       channel,
-			Text:          string(bs),
-			Username:      username,
-			EscapeText:    escapeText,
-			CodeBlockText: codeBlockText,
-			IconEmoji:     req.URL.Query().Get("icon_emoji"),
-			IconURL:       req.URL.Query().Get("icon_url"),
+			Text: string(bs),
 		})
+	}
+	if content.Channel == "" {
+		http.Error(w, "query param `channel` is required", http.StatusBadRequest)
+		return
 	}
 	if err := nwp.postContent(req.Context(), content); err != nil {
 		var rle *slack.RateLimitedError
@@ -342,6 +345,9 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 		}
+		if content.Summary == "" && n.Subject != "" {
+			content.Summary = n.Subject
+		}
 	}
 	content.Channel = channel
 	if content.IconEmoji == "" && content.IconURL == "" {
@@ -378,6 +384,8 @@ type Content struct {
 	AsFile        bool               `json:"as_file,omitempty"`
 	AsMessage     bool               `json:"as_message,omitempty"`
 	Filename      string             `json:"filename,omitempty"`
+	Summary       string             `json:"summary,omitempty"`
+	isJSON        *bool
 }
 
 func (content *Content) IsRich() bool {
@@ -418,9 +426,18 @@ func (content *Content) Merge(c *Content) {
 	if c.AsMessage {
 		content.AsMessage = c.AsMessage
 	}
+	if c.Filename != "" {
+		content.Filename = c.Filename
+	}
+	if c.Summary != "" {
+		content.Summary = c.Summary
+	}
 }
 
 func (content *Content) IsJSON() bool {
+	if content.isJSON != nil {
+		return *content.isJSON
+	}
 	if len(content.Blocks) > 0 || len(content.Attachments) > 0 {
 		return false
 	}
@@ -436,6 +453,7 @@ func (content *Content) IsJSON() bool {
 			break
 		}
 	}
+	content.isJSON = &isJSON
 	return isJSON
 }
 
@@ -469,9 +487,6 @@ func (nwp *NowPaste) detectPostMode(content *Content) string {
 		return postAsFile
 	}
 	if nwp.jsonAutoFile && content.IsJSON() {
-		if content.Filename == "" {
-			content.Filename = "message.json"
-		}
 		return postAsFile
 	}
 	return postAsMessage
@@ -491,10 +506,35 @@ func (nwp *NowPaste) postContent(ctx context.Context, content *Content) error {
 	}
 }
 
+// DetermineExtension determines the file extension from the content type.
+func DetermineExtension(content []byte) string {
+	mimeType := http.DetectContentType(content)
+	switch mimeType {
+	case "application/json":
+		return ".json"
+	case "application/xml", "text/xml":
+		return ".xml"
+	case "text/plain; charset=utf-8":
+		return ".txt"
+	case "image/png":
+		return ".png"
+	case "image/jpeg":
+		return ".jpg"
+	case "application/pdf":
+		return ".pdf"
+	default:
+		return ""
+	}
+}
+
 func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
-	log.Println("[debug] try post as file to ", content.Channel, "text size:", len(content.Text))
+	log.Println("[debug] try post as file to ", content.Channel, "text size:", len(content.Text), "summary:", content.Summary)
 	if content.Filename == "" {
-		content.Filename = "nowpaste"
+		if content.IsJSON() {
+			content.Filename = "message.json"
+		} else {
+			content.Filename = "message" + DetermineExtension([]byte(content.Text))
+		}
 	}
 	if channelID, ok, err := nwp.cache.Get(ctx, content.Channel); err == nil && ok {
 		content.Channel = channelID
@@ -509,10 +549,11 @@ func (nwp *NowPaste) postFile(ctx context.Context, content *Content) error {
 		err, timeout := apiRetrier.Do(ctx, func() error {
 			var err error
 			f, err = nwp.client.UploadFileV2Context(ctx, slack.UploadFileV2Parameters{
-				Channel:  content.Channel,
-				Reader:   strings.NewReader(content.Text),
-				Filename: content.Filename,
-				FileSize: len(content.Text),
+				Channel:        content.Channel,
+				Reader:         strings.NewReader(content.Text),
+				Filename:       content.Filename,
+				FileSize:       len(content.Text),
+				InitialComment: content.Summary,
 			})
 			return err
 		})
@@ -628,6 +669,9 @@ func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
 		opts = append(opts, slack.MsgOptionAttachments(content.Attachments...))
 	}
 	if content.Text != "" {
+		if content.Summary != "" {
+			content.Text = content.Summary + "\n\n" + content.Text
+		}
 		if len(content.Text) > textMaxLength {
 			content.Text = content.Text[:textMaxLength-100]
 			content.Text += "\n...(truncated)"
