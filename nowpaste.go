@@ -469,6 +469,9 @@ func (nwp *NowPaste) detectPostMode(content *Content) string {
 		return postAsFile
 	}
 	if nwp.jsonAutoFile && content.IsJSON() {
+		if content.Filename == "" {
+			content.Filename = "message.json"
+		}
 		return postAsFile
 	}
 	return postAsMessage
