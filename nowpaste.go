@@ -643,6 +643,9 @@ func (nwp *NowPaste) postMessage(ctx context.Context, content *Content) error {
 		opts = append(opts, slack.MsgOptionAttachments(content.Attachments...))
 	}
 	if content.Text != "" {
+		if content.Summary != "" {
+			content.Text = content.Summary + "\n\n" + content.Text
+		}
 		if len(content.Text) > textMaxLength {
 			content.Text = content.Text[:textMaxLength-100]
 			content.Text += "\n...(truncated)"
