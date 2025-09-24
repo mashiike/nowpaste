@@ -1,8 +1,6 @@
 module github.com/mashiike/nowpaste
 
-go 1.21
-
-toolchain go1.23.3
+go 1.25.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.1
