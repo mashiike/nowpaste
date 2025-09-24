@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.8.1](https://github.com/mashiike/nowpaste/compare/v0.8.0...v0.8.1) - 2025-09-24
+- Bump the aws-sdk-go-v2 group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/mashiike/nowpaste/pull/138
+- Bump github.com/slack-go/slack from 0.15.0 to 0.16.0 by @dependabot[bot] in https://github.com/mashiike/nowpaste/pull/136
+- Migrate to all tools latest versions and update Go to 1.25.1 by @mashiike in https://github.com/mashiike/nowpaste/pull/140
+
 ## [v0.8.0](https://github.com/mashiike/nowpaste/compare/v0.7.0...v0.8.0) - 2024-11-21
 - json auto file mode by @mashiike in https://github.com/mashiike/nowpaste/pull/122
 - add summary parameter by @mashiike in https://github.com/mashiike/nowpaste/pull/124
