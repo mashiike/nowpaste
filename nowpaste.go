@@ -24,6 +24,8 @@ import (
 	"github.com/slack-go/slack"
 )
 
+const defaultUsername = "nowpaste"
+
 type NowPaste struct {
 	router             *mux.Router
 	client             *slack.Client
@@ -117,7 +119,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	content := nwp.newContent(req)
 	username := req.URL.Query().Get("username")
 	if username == "" {
-		username = "nowpaste"
+		username = defaultUsername
 	}
 	escapeTextStr := req.URL.Query().Get("escape_text")
 	var escapeText bool
@@ -148,7 +150,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 	case "application/x-www-form-urlencoded":
 		username := req.FormValue("username")
 		if username == "" {
-			username = "nowpaste"
+			username = defaultUsername
 		}
 		escapeTextStr := req.FormValue("escape_text")
 		var escapeText bool
@@ -191,7 +193,7 @@ func (nwp *NowPaste) postDefault(w http.ResponseWriter, req *http.Request) {
 			if content.Username == "" {
 				content.Username = req.URL.Query().Get("username")
 				if content.Username == "" {
-					content.Username = "nowpaste"
+					content.Username = defaultUsername
 				}
 			}
 		}
@@ -270,27 +272,27 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	content := nwp.newContent(req)
 	if n.MessageAttributes != nil {
 		for k, v := range n.MessageAttributes {
-			log.Println("[debug] message attribute", k, string(v.Value))
+			log.Println("[debug] message attribute", k, v.Value)
 			if v.Type != "String" {
 				continue
 			}
 			switch k {
 			case "as_file":
-				if b, err := strconv.ParseBool(string(v.Value)); err == nil {
+				if b, err := strconv.ParseBool(v.Value); err == nil {
 					content.AsFile = b
 				}
 			case "as_message":
-				if b, err := strconv.ParseBool(string(v.Value)); err == nil {
+				if b, err := strconv.ParseBool(v.Value); err == nil {
 					content.AsMessage = b
 				}
 			case "filename":
-				content.Filename = string(v.Value)
+				content.Filename = v.Value
 			case "icon_emoji":
-				content.IconEmoji = string(v.Value)
+				content.IconEmoji = v.Value
 			case "icon_url":
-				content.IconURL = string(v.Value)
+				content.IconURL = v.Value
 			case "username":
-				content.Username = string(v.Value)
+				content.Username = v.Value
 			}
 		}
 	}
@@ -326,10 +328,10 @@ func (nwp *NowPaste) postSNS(w http.ResponseWriter, req *http.Request) {
 	case "Notification":
 		decoder := json.NewDecoder(strings.NewReader(n.Message))
 		if err := decoder.Decode(&content); err != nil {
-			content.Text = strings.Trim(string(n.Message), "\"")
+			content.Text = strings.Trim(n.Message, "\"")
 		}
 		if !content.IsRich() {
-			content.Text = strings.Trim(string(n.Message), "\"")
+			content.Text = strings.Trim(n.Message, "\"")
 		}
 		if content.Text != "" {
 			escapeTextStr := req.URL.Query().Get("escape_text")
