@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"strings"
 
+	"github.com/mashiike/nowpaste"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -16,7 +18,6 @@ import (
 	"github.com/fujiwara/logutils"
 	"github.com/fujiwara/ridge"
 	flagx "github.com/ken39arg/go-flagx"
-	"github.com/mashiike/nowpaste"
 )
 
 var (
